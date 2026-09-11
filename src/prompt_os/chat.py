@@ -15,7 +15,9 @@ def run_chat(root: Path, pack: AppPack, *, timezone: str, debug: bool = False) -
     config = LiteLLMConfig.from_environment()
     check_model(config)
     data_root = root / "var"
-    trace = TraceWriter(data_root / "traces" / f"{pack.id}.jsonl")
+    trace = TraceWriter(
+        data_root / "traces" / f"{pack.id}.jsonl", mode=pack.trace_mode
+    )
     console = Console()
     console.print(f"[bold]{pack.name}[/bold] — type [cyan]/quit[/cyan] to leave")
     with StrandsSession(
@@ -29,6 +31,7 @@ def run_chat(root: Path, pack: AppPack, *, timezone: str, debug: bool = False) -
         capabilities=pack.capabilities,
         timezone=timezone,
         debug=debug,
+        trace_path=trace.path,
     ) as session:
         while True:
             try:

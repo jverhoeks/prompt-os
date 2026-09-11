@@ -18,11 +18,11 @@ The service records personal expenses and provides transparent summaries by peri
 - Decimal precision from the original amount is preserved.
 - Relative dates use the configured timezone and service clock.
 - A suggested classification is identified as a suggestion until accepted through use or correction.
-- Totals come from the aggregation service and keep currencies separate. If the aggregation service is unavailable, totals may be calculated directly from the applicable stored expenses using deterministic arithmetic.
+- Totals come from the aggregation service and keep currencies separate.
 - Cross-currency totals require dated exchange rates and disclose their source.
 
 ## Acceptance examples
 
 - “Lunch was €18.50” records exactly EUR 18.50 on the applicable date.
 - “That was client work” updates the relevant expense as reimbursable when the reference is clear.
-- “Spending by category this month” uses stored expenses and deterministic grouped totals, including when the aggregation service is unavailable.
+- “Spending by category this month” uses stored expenses and deterministic grouped totals.

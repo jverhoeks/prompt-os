@@ -36,7 +36,7 @@ def _pack() -> AppPack:
         name="Sample application",
         version="0.1.0",
         capabilities=(),
-        data_policy="local",
+        data_policy="persistent",
         functionality="Sample functionality",
         path=Path("sample-app"),
     )

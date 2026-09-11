@@ -336,7 +336,9 @@ def run_tui(root: Path, pack: AppPack, *, timezone: str, debug: bool = False) ->
     config = LiteLLMConfig.from_environment()
     check_model(config)
     data_root = root / "var"
-    trace = TraceWriter(data_root / "traces" / f"{pack.id}.jsonl")
+    trace = TraceWriter(
+        data_root / "traces" / f"{pack.id}.jsonl", mode=pack.trace_mode
+    )
     with StrandsSession(
         config,
         app_id=pack.id,
@@ -348,6 +350,7 @@ def run_tui(root: Path, pack: AppPack, *, timezone: str, debug: bool = False) ->
         capabilities=pack.capabilities,
         timezone=timezone,
         debug=False,
+        trace_path=trace.path,
     ) as session:
         PromptTUI(
             pack=pack,

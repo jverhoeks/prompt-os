@@ -35,6 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
     improve = commands.add_parser("improve", help="propose and replay one trace-based improvement")
     improve.add_argument("app_id")
     improve.add_argument("--trace-limit", type=int, default=20)
+    contract = commands.add_parser(
+        "contract", help="review and promote a generated data-contract candidate"
+    )
+    contract.add_argument("app_id")
+    contract.add_argument("candidate_id", nargs="?")
     return parser
 
 
@@ -127,6 +132,39 @@ def main(argv: list[str] | None = None) -> int:
             f"Promoted {pack.id} {promotion['from_version']} -> {promotion['to_version']}.\n"
             f"Previous version archived at {promotion['archive_path']}"
         )
+        return 0
+    if args.command == "contract":
+        from .contract_review import (
+            format_contract_review,
+            promote_contract_candidate,
+            review_contract_candidate,
+        )
+
+        pack = next((item for item in packs if item.id == args.app_id), None)
+        if pack is None:
+            print(f"error: unknown application {args.app_id!r}", file=sys.stderr)
+            return 1
+        try:
+            review = review_contract_candidate(Path.cwd(), pack, args.candidate_id)
+            print(format_contract_review(review))
+            if not review["replay"]["passed"]:
+                print("Not promotable: replay checks failed.")
+                return 1
+            approved = input("\nPromote this data contract? [y/N] ").strip().lower() in {
+                "y",
+                "yes",
+            }
+            if not approved:
+                print("Not promoted. The candidate remains available for review.")
+                return 0
+            promoted = promote_contract_candidate(Path.cwd(), pack, review)
+        except EOFError:
+            print("Not promoted. The candidate remains available for review.")
+            return 0
+        except (KeyError, OSError, ValueError, RuntimeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(f"Promoted data contract {promoted['version']} for {pack.id}.")
         return 0
     print(f"validated {len(packs)} application packs")
     return 0

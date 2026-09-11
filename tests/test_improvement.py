@@ -4,9 +4,15 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from prompt_os.app_pack import AppPack
 from prompt_os.cli import main
-from prompt_os.improvement import format_improvement_proposal, promote_improvement
+from prompt_os.improvement import (
+    _metadata_trace,
+    format_improvement_proposal,
+    promote_improvement,
+)
 
 
 def _create_app(root: Path) -> AppPack:
@@ -23,7 +29,7 @@ def _create_app(root: Path) -> AppPack:
                 "version": "1.2.3",
                 "functionality": "FUNCTIONALITY.md",
                 "capabilities": ["storage"],
-                "data_policy": "local",
+                "data_policy": "persistent",
             }
         ),
         encoding="utf-8",
@@ -49,11 +55,22 @@ def _create_candidate(root: Path, pack: AppPack) -> dict[str, object]:
         "source_functionality_sha256": hashlib.sha256(
             (pack.functionality.rstrip() + "\n").encode("utf-8")
         ).hexdigest(),
+        "candidate_functionality_sha256": hashlib.sha256(
+            (candidate_root / "FUNCTIONALITY.md").read_bytes()
+        ).hexdigest(),
         "summary": "Allow retrieval",
         "rationale": "A trace showed retrieval was expected.",
         "evidence_trace_ids": ["trace-1"],
-        "baseline": {"passed": 1, "total": 1},
-        "candidate": {"passed": 1, "total": 1},
+        "baseline": {
+            "passed": 1,
+            "total": 1,
+            "cases": [{"id": "case-1", "passed": True}],
+        },
+        "candidate": {
+            "passed": 1,
+            "total": 1,
+            "cases": [{"id": "case-1", "passed": True}],
+        },
         "recommended": False,
         "status": "candidate",
     }
@@ -107,3 +124,53 @@ def test_declining_cli_proposal_leaves_production_untouched(
     assert AppPack.load(pack.path).version == "1.2.3"
     assert not (pack.path / "versions").exists()
     assert "Not promoted" in capsys.readouterr().out
+
+
+def test_promotion_rejects_a_baseline_regression(tmp_path: Path) -> None:
+    pack = _create_app(tmp_path)
+    result = _create_candidate(tmp_path, pack)
+    result["candidate"] = {
+        "passed": 0,
+        "total": 1,
+        "cases": [{"id": "case-1", "passed": False}],
+    }
+    report_path = Path(result["path"]) / "report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["candidate"] = result["candidate"]
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="regresses"):
+        promote_improvement(tmp_path, pack, result)
+
+    assert AppPack.load(pack.path).version == "1.2.3"
+
+
+def test_sensitive_improvement_evidence_redacts_legacy_full_trace_content() -> None:
+    sanitized = _metadata_trace(
+        {
+            "trace_id": "trace-1",
+            "app_id": "sample-app",
+            "outcome": "completed",
+            "user_message": "private",
+            "reply": "also private",
+            "tool_calls": [
+                {"name": "store.put", "arguments": {"secret": "private"}}
+            ],
+        }
+    )
+
+    assert sanitized["content_redacted"] is True
+    assert sanitized["tool_calls"] == [{"name": "store.put"}]
+    assert "user_message" not in sanitized
+    assert "reply" not in sanitized
+
+
+def test_promotion_rejects_candidate_content_changed_after_replay(tmp_path: Path) -> None:
+    pack = _create_app(tmp_path)
+    result = _create_candidate(tmp_path, pack)
+    (Path(result["path"]) / "FUNCTIONALITY.md").write_text(
+        "# Purpose\n\nTampered.\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="changed after replay"):
+        promote_improvement(tmp_path, pack, result)

@@ -1,12 +1,59 @@
 {
   "format_version": 1,
   "cases": [
-    {"id": "calculator-contract", "app": "calculator", "message": "Propose the smallest initial data contract justified by this service description. Do not promote it.", "required_tools": ["contract.propose"], "minimum_candidates": 1},
-    {"id": "task-contract", "app": "task-list", "message": "Propose the smallest initial data contract justified by this service description. Do not promote it.", "required_tools": ["contract.propose"], "minimum_candidates": 1},
-    {"id": "activity-contract", "app": "activity-log", "message": "Propose the smallest initial data contract justified by this service description. Do not promote it.", "required_tools": ["contract.propose"], "minimum_candidates": 1},
-    {"id": "inventory-contract", "app": "inventory", "message": "Propose the smallest initial data contract justified by this service description. Do not promote it.", "required_tools": ["contract.propose"], "minimum_candidates": 1},
-    {"id": "expense-contract", "app": "expense-log", "message": "Propose the smallest initial data contract justified by this service description. Do not promote it.", "required_tools": ["contract.propose"], "minimum_candidates": 1},
-    {"id": "library-contract", "app": "personal-library", "message": "Propose the smallest initial data contract justified by this service description. Do not promote it.", "required_tools": ["contract.propose"], "minimum_candidates": 1},
-    {"id": "decision-contract", "app": "decision-journal", "message": "Propose the smallest initial data contract justified by this service description. Do not promote it.", "required_tools": ["contract.propose"], "minimum_candidates": 1}
+    {
+      "id": "task-contract",
+      "app": "task-list",
+      "turns": [
+        {"message": "Record these as three separate tasks: call Alex, send the report, and buy milk.", "required_tools": ["store.put"]},
+        {"message": "Using the available evidence, propose the smallest justified initial data contract. Do not promote it.", "required_tools": ["contract.evidence", "contract.propose"]}
+      ],
+      "expected_state": {"documents": 3, "revisions": 3, "candidates": 1}
+    },
+    {
+      "id": "activity-contract",
+      "app": "activity-log",
+      "turns": [
+        {"message": "Record three separate activities today: 30 minutes planning, 45 minutes reviewing, and 60 minutes building.", "required_tools": ["store.put"]},
+        {"message": "Using the available evidence, propose the smallest justified initial data contract. Do not promote it.", "required_tools": ["contract.evidence", "contract.propose"]}
+      ],
+      "expected_state": {"documents": 3, "revisions": 3, "candidates": 1}
+    },
+    {
+      "id": "inventory-contract",
+      "app": "inventory",
+      "turns": [
+        {"message": "Record three separate purchases: six eggs, one litre of milk, and two loaves of bread.", "required_tools": ["store.put"]},
+        {"message": "Using the available evidence, propose the smallest justified initial data contract. Do not promote it.", "required_tools": ["contract.evidence", "contract.propose"]}
+      ],
+      "expected_state": {"documents": 3, "revisions": 3, "candidates": 1}
+    },
+    {
+      "id": "expense-contract",
+      "app": "expense-log",
+      "turns": [
+        {"message": "Record three separate EUR expenses today: lunch 18.50, coffee 3.20, and train 12.00.", "required_tools": ["store.put"]},
+        {"message": "Using the available evidence, propose the smallest justified initial data contract. Do not promote it.", "required_tools": ["contract.evidence", "contract.propose"]}
+      ],
+      "expected_state": {"documents": 3, "revisions": 3, "candidates": 1}
+    },
+    {
+      "id": "library-contract",
+      "app": "personal-library",
+      "turns": [
+        {"message": "Add three separate books to my reading list: Dune, Beloved, and The Left Hand of Darkness.", "required_tools": ["store.put"]},
+        {"message": "Using the available evidence, propose the smallest justified initial data contract. Do not promote it.", "required_tools": ["contract.evidence", "contract.propose"]}
+      ],
+      "expected_state": {"documents": 3, "revisions": 3, "candidates": 1}
+    },
+    {
+      "id": "decision-contract",
+      "app": "decision-journal",
+      "turns": [
+        {"message": "Record three separate decisions: use SQLite for simpler deployment, ship weekly for faster feedback, and keep exports manual for privacy.", "required_tools": ["store.put"]},
+        {"message": "Using the available evidence, propose the smallest justified initial data contract. Do not promote it.", "required_tools": ["contract.evidence", "contract.propose"]}
+      ],
+      "expected_state": {"documents": 3, "revisions": 3, "candidates": 1}
+    }
   ]
 }

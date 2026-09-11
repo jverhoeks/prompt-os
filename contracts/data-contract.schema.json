@@ -50,7 +50,7 @@
       "properties": {
         "description": {"type": "string", "minLength": 1},
         "type": {
-          "enum": ["string", "integer", "number", "boolean", "datetime", "reference", "list"]
+          "enum": ["string", "integer", "number", "decimal", "boolean", "datetime", "reference", "list"]
         },
         "required": {"type": "boolean"},
         "references": {"type": "string"},

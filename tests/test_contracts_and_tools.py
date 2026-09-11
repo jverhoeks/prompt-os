@@ -5,16 +5,30 @@ from pathlib import Path
 import pytest
 
 from prompt_os.data_contract import DataContractRepository
-from prompt_os.mcp_server import create_server
+from prompt_os.mcp_server import GeneratedDataContract, _contract_value, create_server
 from prompt_os.model_client import LiteLLMConfig
 from prompt_os.tool_service import ToolService
 from prompt_os.cli import main
 
 
 ROOT = Path(__file__).parents[1]
+EVIDENCE = [
+    "document:record-1@1",
+    "document:record-2@1",
+    "document:record-3@1",
+]
 
 
-def generated_contract(*, based_on=None, version="0.1.0") -> dict:
+def available_evidence() -> dict[str, dict]:
+    return {
+        evidence_id: {"kind": "document", "document": {"label": evidence_id}}
+        for evidence_id in EVIDENCE
+    }
+
+
+def generated_contract(
+    *, based_on=None, version="0.1.0", field_evidence: list[str] | None = None
+) -> dict:
     return {
         "version": version,
         "based_on": based_on,
@@ -28,13 +42,7 @@ def generated_contract(*, based_on=None, version="0.1.0") -> dict:
                         "description": "The supplied label.",
                         "type": "string",
                         "required": True,
-                        "evidence": ["first example", "second example", "third example"],
-                    },
-                    "note": {
-                        "description": "Optional supporting detail.",
-                        "type": "string",
-                        "required": False,
-                        "evidence": ["one record included a note"],
+                        "evidence": field_evidence or EVIDENCE,
                     },
                 },
             }
@@ -51,14 +59,35 @@ def test_generated_contract_is_candidate_until_replay_gated_promotion(tmp_path: 
         "sample-app",
         generated_contract(),
         rationale="Repeated records now support stable labels.",
-        evidence=["record-1", "record-2", "record-3"],
+        evidence=EVIDENCE,
+        available_evidence=available_evidence(),
     )
 
     assert repository.current("sample-app") is None
     with pytest.raises(ValueError, match="replay"):
-        repository.promote("sample-app", candidate.id, replay_passed=False)
-    promoted = repository.promote("sample-app", candidate.id, replay_passed=True)
+        repository.promote(
+            "sample-app",
+            candidate.id,
+            replay_id="not-a-replay",
+            available_evidence=available_evidence(),
+        )
+    replay = repository.replay(
+        "sample-app", candidate.id, available_evidence=available_evidence()
+    )
+    promoted = repository.promote(
+        "sample-app",
+        candidate.id,
+        replay_id=replay["replay_id"],
+        available_evidence=available_evidence(),
+    )
     assert repository.current("sample-app") == promoted
+
+
+def test_initial_generated_contract_keeps_explicit_null_base_version() -> None:
+    value = _contract_value(GeneratedDataContract.model_validate(generated_contract()))
+
+    assert "based_on" in value
+    assert value["based_on"] is None
 
 
 def test_required_generated_field_needs_three_examples(tmp_path: Path) -> None:
@@ -66,9 +95,54 @@ def test_required_generated_field_needs_three_examples(tmp_path: Path) -> None:
         tmp_path / "contracts", ROOT / "contracts" / "data-contract.schema.json"
     )
     contract = generated_contract()
-    contract["collections"]["things"]["fields"]["label"]["evidence"] = ["only one"]
+    contract["collections"]["things"]["fields"]["label"]["evidence"] = [EVIDENCE[0]]
     with pytest.raises(ValueError, match="three supporting examples"):
-        repository.propose("sample-app", contract, rationale="Too early", evidence=["record-1"])
+        repository.propose(
+            "sample-app",
+            contract,
+            rationale="Too early",
+            evidence=[EVIDENCE[0]],
+            available_evidence=available_evidence(),
+        )
+    with pytest.raises(ValueError, match="unknown evidence"):
+        unknown = ["made-up-1", "made-up-2", "made-up-3"]
+        repository.propose(
+            "sample-app",
+            generated_contract(field_evidence=unknown),
+            rationale="Ungrounded",
+            evidence=unknown,
+            available_evidence=available_evidence(),
+        )
+
+
+def test_contract_replay_is_bound_to_candidate_and_immutable_evidence(
+    tmp_path: Path,
+) -> None:
+    repository = DataContractRepository(
+        tmp_path / "contracts", ROOT / "contracts" / "data-contract.schema.json"
+    )
+    available = available_evidence()
+    candidate = repository.propose(
+        "sample-app",
+        generated_contract(),
+        rationale="Grounded candidate.",
+        evidence=EVIDENCE,
+        available_evidence=available,
+    )
+    replay = repository.replay(
+        "sample-app", candidate.id, available_evidence=available
+    )
+    changed = available | {
+        EVIDENCE[0]: {"kind": "document", "document": {"label": "changed"}}
+    }
+
+    with pytest.raises(ValueError, match="replay"):
+        repository.promote(
+            "sample-app",
+            candidate.id,
+            replay_id=replay["replay_id"],
+            available_evidence=changed,
+        )
 
 
 def test_tool_service_uses_inbox_then_promoted_contract(tmp_path: Path) -> None:
@@ -84,13 +158,20 @@ def test_tool_service_uses_inbox_then_promoted_contract(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="must enter inbox"):
         service.put({"label": "first"}, collection="things")
 
-    candidate = service.contracts.propose(
-        "sample-app",
-        generated_contract(),
+    for index in range(1, 4):
+        service.put({"label": f"example-{index}"}, document_id=f"record-{index}")
+    evidence = [
+        evidence_id
+        for evidence_id, item in service.contract_evidence().items()
+        if item.get("document", {}).get("label")
+    ]
+    candidate = service.propose_contract(
+        generated_contract(field_evidence=evidence),
         rationale="Enough examples exist.",
-        evidence=["record-1", "record-2", "record-3"],
+        evidence=evidence,
     )
-    service.contracts.promote("sample-app", candidate.id, replay_passed=True)
+    replay = service.replay_contract(candidate["candidate_id"])
+    service.promote_contract(candidate["candidate_id"], replay["replay_id"])
     saved = service.put({"label": "first"}, collection="things")
     assert saved["collection"] == "things"
     with pytest.raises(ValueError, match="unknown fields"):
@@ -143,6 +224,62 @@ def test_math_service_is_deterministic_and_bounded(tmp_path: Path) -> None:
     assert service.calculate("84 * 0.17")["value"] == "14.28"
     with pytest.raises(ValueError, match="unsupported"):
         service.calculate("__import__('os').getcwd()")
+    service.close()
+
+
+def test_unit_conversion_is_deterministic_and_rejects_incompatible_units(
+    tmp_path: Path,
+) -> None:
+    service = ToolService(
+        app_id="sample-app",
+        database=tmp_path / "db.sqlite",
+        contract_root=tmp_path / "contracts",
+        contract_schema=ROOT / "contracts" / "data-contract.schema.json",
+        timezone="UTC",
+    )
+    conversion = service.convert("3", "miles", "km")
+    assert conversion["output"] == {
+        "value": "4.828032",
+        "unit": "kilometre",
+    }
+    assert "1609.344" in conversion["basis"]
+    assert service.convert("32", "fahrenheit", "celsius")["output"]["value"] == "0"
+    with pytest.raises(ValueError, match="different kinds"):
+        service.convert("10", "metres", "kilograms")
+    service.close()
+
+
+def test_contract_trace_evidence_is_hash_bound_without_exposing_content(
+    tmp_path: Path,
+) -> None:
+    trace_path = tmp_path / "traces.jsonl"
+    trace_path.write_text(
+        json.dumps(
+            {
+                "trace_id": "trace-1",
+                "app_id": "sample-app",
+                "outcome": "completed",
+                "user_message": "private message",
+                "tool_calls": [{"name": "store.put", "arguments": {"secret": "value"}}],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    service = ToolService(
+        app_id="sample-app",
+        database=tmp_path / "db.sqlite",
+        contract_root=tmp_path / "contracts",
+        contract_schema=ROOT / "contracts" / "data-contract.schema.json",
+        timezone="UTC",
+        trace_path=trace_path,
+    )
+
+    evidence = service.contract_evidence()["trace:trace-1"]
+
+    assert evidence["tool_names"] == ["store.put"]
+    assert "private message" not in json.dumps(evidence)
+    assert "secret" not in json.dumps(evidence)
     service.close()
 
 

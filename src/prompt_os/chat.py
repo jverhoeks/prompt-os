@@ -25,6 +25,8 @@ def run_chat(root: Path, pack: AppPack, *, timezone: str, debug: bool = False) -
         database=data_root / "prompt-os.sqlite",
         contract_root=data_root / "data-contracts",
         contract_schema=root / "contracts" / "data-contract.schema.json",
+        tool_catalog=root / "contracts" / "tool-catalog.json",
+        capabilities=pack.capabilities,
         timezone=timezone,
         debug=debug,
     ) as session:

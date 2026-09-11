@@ -71,13 +71,23 @@ prompt-os chat activity-log --timezone Europe/Amsterdam
 Application data is stored in `var/prompt-os.sqlite`; traces are written to `var/traces/<app>.jsonl`. Both stay local and are excluded from Git.
 Application replies are rendered as terminal Markdown. Routine tool-call logs are hidden; add `--debug` to the chat command to show detailed MCP request logs.
 
+Run the same application in the full-screen terminal interface:
+
+```bash
+uv run prompt-os tui expense-log --timezone Europe/Amsterdam
+```
+
+The TUI is a generic conversation renderer: its title and behaviour come from the selected application pack. The model may describe results using generic metrics, lists, tables and bar charts, which the TUI renders as native terminal components without predefined application fields, categories or workflows. Use `Ctrl+L` to clear the visible conversation, `Ctrl+Q` to quit, or add `--debug` to show tool activity after replies.
+
+Application capabilities also constrain the fundamental tools exposed to the model. For example, an application without the `calculation` capability does not receive the deterministic calculator tool, and the runtime declines requests outside the application's business functionality.
+
 After the app has accumulated useful traces, request one narrow improvement:
 
 ```bash
 prompt-os improve activity-log
 ```
 
-The command writes a candidate under `var/improvements/`, runs the app's smoke cases against both current and candidate functionality, and reports the comparison. It never changes the production `FUNCTIONALITY.md` file.
+The command writes a candidate under `var/improvements/`, runs the app's smoke cases against both current and candidate functionality, and shows a readable proposal with its diff and replay comparison. It then asks whether to promote the candidate. Declining leaves production untouched. Explicit approval archives the current specification under `apps/<app>/versions/<version>/`, installs the candidate, and increments the application's patch version.
 
 Each case uses an isolated temporary SQLite database and contract directory. The default suite is a connectivity and tool-use smoke test. The `contracts` suite verifies that Strands can generate evidence-backed contract candidates from each business specification. Candidates are never promoted by an evaluation run. Richer multi-turn improvement comparisons come next.
 

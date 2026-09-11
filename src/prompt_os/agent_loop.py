@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 import re
 import sys
@@ -14,9 +15,11 @@ from .model_client import LiteLLMConfig, create_model
 
 
 GENERIC_RUNTIME_POLICY = """Operate the service described below.
+Only perform services described by the business description; politely decline unrelated requests.
 Use the supplied fundamental services for facts, time, calculations and persistence.
 Do not invent stored facts or calculated values.
 When no data contract is promoted, new records belong in the inbox as flexible JSON.
+When structured presentation materially improves a result, call view.present with the smallest useful generic view and also provide a concise textual answer.
 The business description is authoritative for product behaviour.
 """
 
@@ -31,6 +34,8 @@ class StrandsSession:
         database: Path,
         contract_root: Path,
         contract_schema: Path,
+        tool_catalog: Path,
+        capabilities: tuple[str, ...],
         timezone: str = "UTC",
         debug: bool = False,
     ) -> None:
@@ -48,12 +53,15 @@ class StrandsSession:
         self._client = MCPClient(lambda: stdio_client(parameters))
         self._model = create_model(config)
         self._system_prompt = f"{GENERIC_RUNTIME_POLICY}\n\n{functionality}"
+        self._allowed_tools = _allowed_tool_names(tool_catalog, capabilities)
         self._tool_names: dict[str, str] = {}
         self.agent: Agent | None = None
 
     def __enter__(self) -> "StrandsSession":
         self._client.start()
-        tools = _model_tools(self._client.list_tools_sync(), self._client)
+        tools = _model_tools(
+            self._client.list_tools_sync(), self._client, allowed_names=self._allowed_tools
+        )
         self._tool_names = {tool.tool_name: tool.mcp_tool.name for tool in tools}
         self.agent = Agent(
             model=self._model,
@@ -87,6 +95,8 @@ def run_turn(
     database: Path,
     contract_root: Path,
     contract_schema: Path,
+    tool_catalog: Path,
+    capabilities: tuple[str, ...],
     timezone: str = "UTC",
 ) -> dict[str, Any]:
     with StrandsSession(
@@ -96,6 +106,8 @@ def run_turn(
         database=database,
         contract_root=contract_root,
         contract_schema=contract_schema,
+        tool_catalog=tool_catalog,
+        capabilities=capabilities,
         timezone=timezone,
     ) as session:
         return session.send(user_message)
@@ -128,17 +140,39 @@ def _tool_calls(
     return calls
 
 
-def _model_tools(tools: list[MCPAgentTool], client: MCPClient) -> list[MCPAgentTool]:
+def _model_tools(
+    tools: list[MCPAgentTool],
+    client: MCPClient,
+    *,
+    allowed_names: set[str],
+) -> list[MCPAgentTool]:
     """Expose protocol-safe aliases while retaining each MCP tool's wire name."""
     aliases: set[str] = set()
     adapted: list[MCPAgentTool] = []
     for tool in tools:
+        if tool.mcp_tool.name not in allowed_names:
+            continue
         alias = _model_tool_name(tool.tool_name)
         if alias in aliases:
             raise RuntimeError(f"MCP tool names collide after model-safe normalization: {alias!r}")
         aliases.add(alias)
         adapted.append(MCPAgentTool(tool.mcp_tool, client, name_override=alias))
     return adapted
+
+
+def _allowed_tool_names(tool_catalog: Path, capabilities: tuple[str, ...]) -> set[str]:
+    payload = json.loads(tool_catalog.read_text(encoding="utf-8"))
+    records = payload.get("tools") if isinstance(payload, dict) else None
+    if not isinstance(records, list):
+        raise ValueError(f"{tool_catalog}: tools must be a list")
+    allowed_blocks = set(capabilities) | {"data-contract", "presentation"}
+    return {
+        record["name"]
+        for record in records
+        if isinstance(record, dict)
+        and isinstance(record.get("name"), str)
+        and record.get("block") in allowed_blocks
+    }
 
 
 def _model_tool_name(name: str) -> str:

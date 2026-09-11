@@ -5,10 +5,14 @@ from typing import Any
 
 from prompt_os.agent_loop import (
     StrandsSession,
+    _allowed_tool_names,
     _mcp_server_arguments,
     _model_tool_name,
     _tool_calls,
 )
+
+
+ROOT = Path(__file__).parents[1]
 
 
 class _Client:
@@ -78,3 +82,21 @@ def test_session_enables_mcp_debug_logging_explicitly() -> None:
     )
 
     assert arguments[-2:] == ["--log-level", "DEBUG"]
+
+
+def test_application_capabilities_limit_exposed_tools() -> None:
+    catalog = ROOT / "contracts" / "tool-catalog.json"
+
+    expense_tools = _allowed_tool_names(
+        catalog, ("documents", "clock", "aggregation")
+    )
+    calculator_tools = _allowed_tool_names(catalog, ("calculation", "conversion"))
+
+    assert "store.put" in expense_tools
+    assert "store.aggregate" in expense_tools
+    assert "system.now" in expense_tools
+    assert "math.evaluate" not in expense_tools
+    assert "math.evaluate" in calculator_tools
+    assert "store.put" not in calculator_tools
+    assert "view.present" in expense_tools
+    assert "view.present" in calculator_tools

@@ -161,6 +161,8 @@ def test_cli_loads_dotenv_without_overriding_shell_values(
         "LITELLM_MODEL=file-model\n"
     )
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("LITELLM_BASE_URL", raising=False)
+    monkeypatch.delenv("LITELLM_API_KEY", raising=False)
     monkeypatch.setenv("LITELLM_MODEL", "shell-model")
     assert main(["--apps-root", str(ROOT / "apps"), "validate"]) == 0
     assert LiteLLMConfig.from_environment() == LiteLLMConfig(

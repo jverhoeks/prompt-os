@@ -8,6 +8,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
 from .tool_service import ToolService
+from .view_description import ViewDescription
 
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -110,6 +111,11 @@ def create_server(service: ToolService, *, log_level: LogLevel = "ERROR") -> Fas
     @server.tool(name="math.evaluate")
     def math_evaluate(expression: str) -> dict[str, str]:
         return service.calculate(expression)
+
+    @server.tool(name="view.present")
+    def view_present(view: ViewDescription) -> dict[str, Any]:
+        """Present results using generic UI blocks when structure aids understanding."""
+        return {"accepted": True, "blocks": len(view.blocks)}
 
     return server
 

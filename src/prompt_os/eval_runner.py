@@ -49,6 +49,8 @@ def run_evaluation(
                     database=database,
                     contract_root=contract_root,
                     contract_schema=root / "contracts" / "data-contract.schema.json",
+                    tool_catalog=root / "contracts" / "tool-catalog.json",
+                    capabilities=packs[case["app"]].capabilities,
                 )
                 used = {call["name"] for call in outcome["tool_calls"]}
                 missing = sorted(set(case["required_tools"]) - used)

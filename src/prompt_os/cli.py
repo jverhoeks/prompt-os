@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 import sys
 
@@ -29,6 +28,10 @@ def build_parser() -> argparse.ArgumentParser:
     chat.add_argument("app_id")
     chat.add_argument("--timezone", default="UTC")
     chat.add_argument("--debug", action="store_true", help="show detailed runtime logs")
+    tui = commands.add_parser("tui", help="run an application in a terminal interface")
+    tui.add_argument("app_id")
+    tui.add_argument("--timezone", default="UTC")
+    tui.add_argument("--debug", action="store_true", help="show tool activity")
     improve = commands.add_parser("improve", help="propose and replay one trace-based improvement")
     improve.add_argument("app_id")
     improve.add_argument("--trace-limit", type=int, default=20)
@@ -79,8 +82,22 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError, RuntimeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
+    if args.command == "tui":
+        from .tui import run_tui
+
+        pack = next((item for item in packs if item.id == args.app_id), None)
+        if pack is None:
+            print(f"error: unknown application {args.app_id!r}", file=sys.stderr)
+            return 1
+        try:
+            return run_tui(
+                Path.cwd(), pack, timezone=args.timezone, debug=args.debug
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
     if args.command == "improve":
-        from .improvement import improve
+        from .improvement import format_improvement_proposal, improve, promote_improvement
 
         pack = next((item for item in packs if item.id == args.app_id), None)
         if pack is None:
@@ -91,7 +108,25 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError, RuntimeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(format_improvement_proposal(pack, result))
+        if result["status"] == "no-change":
+            return 0
+        try:
+            approved = input("\nPromote this improvement? [y/N] ").strip().lower() in {"y", "yes"}
+        except EOFError:
+            approved = False
+        if not approved:
+            print("Not promoted. The candidate remains available for review.")
+            return 0
+        try:
+            promotion = promote_improvement(Path.cwd(), pack, result)
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"Promoted {pack.id} {promotion['from_version']} -> {promotion['to_version']}.\n"
+            f"Previous version archived at {promotion['archive_path']}"
+        )
         return 0
     print(f"validated {len(packs)} application packs")
     return 0

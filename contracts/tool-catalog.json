@@ -2,16 +2,16 @@
   "format_version": 1,
   "tools": [
     {"name": "system.now", "block": "clock", "purpose": "Return local date and time from the configured clock.", "mutates": false},
-    {"name": "store.put", "block": "storage", "purpose": "Create or replace an application-scoped JSON document.", "mutates": true},
-    {"name": "store.get", "block": "storage", "purpose": "Read one application-scoped document.", "mutates": false},
-    {"name": "store.query", "block": "storage", "purpose": "Find documents using exact JSON field matches.", "mutates": false},
-    {"name": "store.scan", "block": "storage", "purpose": "Read recent documents for structure discovery and review.", "mutates": false},
-    {"name": "store.archive", "block": "storage", "purpose": "Soft-delete a document while retaining history.", "mutates": true},
-    {"name": "store.describe", "block": "storage", "purpose": "Return collection counts and the current generated contract.", "mutates": false},
-    {"name": "store.aggregate", "block": "storage", "purpose": "Calculate deterministic counts and sums over stored documents.", "mutates": false},
+    {"name": "store.put", "block": "documents", "purpose": "Create or replace an application-scoped JSON document.", "mutates": true},
+    {"name": "store.get", "block": "documents", "purpose": "Read one application-scoped document.", "mutates": false},
+    {"name": "store.query", "block": "documents", "purpose": "Find documents using exact JSON field matches.", "mutates": false},
+    {"name": "store.scan", "block": "documents", "purpose": "Read recent documents for structure discovery and review.", "mutates": false},
+    {"name": "store.archive", "block": "documents", "purpose": "Soft-delete a document while retaining history.", "mutates": true},
+    {"name": "store.describe", "block": "documents", "purpose": "Return collection counts and the current generated contract.", "mutates": false},
+    {"name": "store.aggregate", "block": "aggregation", "purpose": "Calculate deterministic counts and sums over stored documents.", "mutates": false},
     {"name": "contract.current", "block": "data-contract", "purpose": "Read the current promoted application data contract.", "mutates": false},
     {"name": "contract.propose", "block": "data-contract", "purpose": "Submit an evidence-backed generated contract candidate.", "mutates": true},
-    {"name": "math.evaluate", "block": "calculation", "purpose": "Evaluate bounded arithmetic deterministically.", "mutates": false}
+    {"name": "math.evaluate", "block": "calculation", "purpose": "Evaluate bounded arithmetic deterministically.", "mutates": false},
+    {"name": "view.present", "block": "presentation", "purpose": "Return a generic structured view description for capable clients.", "mutates": false}
   ]
 }
-

@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prompt-os"
+version = "0.1.0"
+description = "A generic harness for applications described in business language"
+requires-python = ">=3.11"
+dependencies = [
+  "jsonschema>=4.20,<5",
+  "mcp>=1.27,<2",
+  "python-dotenv>=1.0,<2",
+  "rich>=13,<15",
+  "strands-agents[litellm]>=1.30,<2"
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[project.scripts]
+prompt-os = "prompt_os.cli:main"
+prompt-os-mcp = "prompt_os.mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

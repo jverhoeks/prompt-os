@@ -1,0 +1,9 @@
+{
+  "id": "calculator",
+  "name": "Calculator and converter",
+  "version": "0.1.0",
+  "functionality": "FUNCTIONALITY.md",
+  "capabilities": ["calculation", "conversion"],
+  "data_policy": "optional-history"
+}
+

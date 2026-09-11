@@ -1,0 +1,9 @@
+{
+  "id": "decision-journal",
+  "name": "Decision journal",
+  "version": "0.1.0",
+  "functionality": "FUNCTIONALITY.md",
+  "capabilities": ["documents", "retrieval", "clock"],
+  "data_policy": "persistent-sensitive"
+}
+

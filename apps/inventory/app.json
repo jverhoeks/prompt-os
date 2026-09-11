@@ -1,0 +1,9 @@
+{
+  "id": "inventory",
+  "name": "Pantry and inventory",
+  "version": "0.1.0",
+  "functionality": "FUNCTIONALITY.md",
+  "capabilities": ["documents", "calculation"],
+  "data_policy": "persistent"
+}
+

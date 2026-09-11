@@ -1,0 +1,9 @@
+{
+  "id": "personal-library",
+  "name": "Personal library",
+  "version": "0.1.0",
+  "functionality": "FUNCTIONALITY.md",
+  "capabilities": ["documents", "retrieval"],
+  "data_policy": "persistent"
+}
+

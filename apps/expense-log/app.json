@@ -1,0 +1,9 @@
+{
+  "id": "expense-log",
+  "name": "Expense log",
+  "version": "0.1.0",
+  "functionality": "FUNCTIONALITY.md",
+  "capabilities": ["documents", "clock", "aggregation"],
+  "data_policy": "persistent-sensitive"
+}
+

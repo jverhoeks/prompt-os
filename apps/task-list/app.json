@@ -1,0 +1,9 @@
+{
+  "id": "task-list",
+  "name": "Task list",
+  "version": "0.1.0",
+  "functionality": "FUNCTIONALITY.md",
+  "capabilities": ["documents", "clock"],
+  "data_policy": "persistent"
+}
+

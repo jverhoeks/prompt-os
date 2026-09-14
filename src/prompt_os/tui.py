@@ -23,6 +23,7 @@ from .view_description import (
     TableBlock,
     TextBlock,
     ViewDescription,
+    view_from_tool_calls,
 )
 
 
@@ -248,7 +249,7 @@ def _user_message(content: str) -> Vertical:
 
 def _assistant_message(outcome: dict[str, Any], *, show_tools: bool) -> Vertical:
     children: list[Any] = [Label("App", classes="message-label")]
-    view = _extract_view(outcome)
+    view = view_from_tool_calls(outcome.get("tool_calls"))
     if view is not None:
         children.append(_structured_view(view))
     children.append(Markdown(str(outcome["reply"])))
@@ -270,16 +271,6 @@ class ViewTable(DataTable[str]):
     def on_mount(self) -> None:
         self.add_columns(*self._block.columns)
         self.add_rows(self._block.rows)
-
-
-def _extract_view(outcome: dict[str, Any]) -> ViewDescription | None:
-    for call in reversed(outcome.get("tool_calls", [])):
-        if call.get("name") != "view.present" or call.get("status") == "error":
-            continue
-        view = call.get("arguments", {}).get("view")
-        if isinstance(view, dict):
-            return ViewDescription.model_validate(view)
-    return None
 
 
 def _structured_view(view: ViewDescription) -> Vertical:

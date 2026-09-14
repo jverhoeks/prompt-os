@@ -9,6 +9,21 @@ from .app_pack import AppPack
 from .tool_service import ToolService
 
 
+def list_contract_candidates(root: Path, pack: AppPack) -> dict[str, Any]:
+    service = _service(root, pack)
+    try:
+        return {
+            "current": service.contracts.current(pack.id),
+            "candidates": [
+                item
+                for item in service.contracts.candidates(pack.id)
+                if item.get("status") == "candidate"
+            ],
+        }
+    finally:
+        service.close()
+
+
 def review_contract_candidate(
     root: Path, pack: AppPack, candidate_id: str | None = None
 ) -> dict[str, Any]:

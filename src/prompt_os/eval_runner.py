@@ -10,9 +10,11 @@ from .replay import case_detail, run_case
 from .tracing import TraceWriter
 
 
-def run_evaluation(
+def collect_evaluation(
     root: Path, *, selected_app: str | None = None, suite: str = "smoke"
-) -> int:
+) -> dict[str, object]:
+    if suite not in {"smoke", "contracts", "all"}:
+        raise ValueError("suite must be smoke, contracts or all")
     config = LiteLLMConfig.from_environment()
     check_model(config)
     packs = {pack.id: pack for pack in discover_app_packs(root / "apps")}
@@ -30,7 +32,7 @@ def run_evaluation(
         cases = [case for case in cases if case["app"] == selected_app]
         if not cases:
             raise ValueError(f"no evaluation cases for {selected_app!r}")
-    failures = 0
+    results: list[dict[str, object]] = []
     with TemporaryDirectory(prefix="prompt-os-eval-") as directory:
         temp = Path(directory)
         for case in cases:
@@ -46,9 +48,31 @@ def run_evaluation(
                 contract_root=contract_root,
                 trace=trace,
             )
-            passed = result["passed"]
-            detail = case_detail(result)
-            failures += int(not passed)
-            print(f"{'PASS' if passed else 'FAIL'} {case['id']}: {detail}")
-    print(f"{len(cases) - failures}/{len(cases)} cases passed")
-    return 1 if failures else 0
+            results.append(
+                {
+                    "id": case["id"],
+                    "passed": result["passed"],
+                    "detail": case_detail(result),
+                    "result": result,
+                }
+            )
+    passed = sum(1 for item in results if item["passed"])
+    return {
+        "suite": suite,
+        "app": selected_app,
+        "passed": passed,
+        "total": len(results),
+        "cases": results,
+    }
+
+
+def run_evaluation(
+    root: Path, *, selected_app: str | None = None, suite: str = "smoke"
+) -> int:
+    report = collect_evaluation(root, selected_app=selected_app, suite=suite)
+    for case in report["cases"]:
+        print(
+            f"{'PASS' if case['passed'] else 'FAIL'} {case['id']}: {case['detail']}"
+        )
+    print(f"{report['passed']}/{report['total']} cases passed")
+    return 1 if report["passed"] != report["total"] else 0

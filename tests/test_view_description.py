@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from prompt_os.view_description import ViewDescription
+from prompt_os.view_description import ViewDescription, view_from_tool_calls
 
 
 def test_generic_view_accepts_mixed_presentation_blocks() -> None:
@@ -20,6 +20,37 @@ def test_generic_view_accepts_mixed_presentation_blocks() -> None:
     )
 
     assert len(view.blocks) == 3
+
+
+def test_view_uses_the_latest_successful_presentation_call() -> None:
+    view = view_from_tool_calls(
+        [
+            {
+                "name": "view.present",
+                "status": "success",
+                "arguments": {"view": {"blocks": [{"type": "text", "markdown": "old"}]}},
+            },
+            {
+                "name": "view.present",
+                "status": "error",
+                "arguments": {"view": {"blocks": [{"type": "text", "markdown": "bad"}]}},
+            },
+            {
+                "name": "view.present",
+                "status": "success",
+                "arguments": {
+                    "view": {
+                        "title": "Latest",
+                        "blocks": [{"type": "metric", "label": "Total", "value": "4"}],
+                    }
+                },
+            },
+        ]
+    )
+
+    assert view is not None
+    assert view.title == "Latest"
+    assert view.blocks[0].value == "4"
 
 
 def test_table_rows_must_match_declared_columns() -> None:

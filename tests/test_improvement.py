@@ -11,6 +11,9 @@ from prompt_os.cli import main
 from prompt_os.improvement import (
     _metadata_trace,
     format_improvement_proposal,
+    improvement_is_promotable,
+    list_improvement_candidates,
+    load_improvement_candidate,
     promote_improvement,
 )
 
@@ -88,6 +91,19 @@ def test_proposal_is_readable_and_reports_a_replay_tie(tmp_path: Path) -> None:
     assert "Replay: current 1/1; candidate 1/1 (no measured improvement)" in rendered
     assert "-Record things." in rendered
     assert "+Record and retrieve things." in rendered
+
+
+def test_saved_candidates_can_be_listed_and_reloaded(tmp_path: Path) -> None:
+    pack = _create_app(tmp_path)
+    result = _create_candidate(tmp_path, pack)
+
+    listed = list_improvement_candidates(tmp_path, pack)
+    loaded = load_improvement_candidate(tmp_path, pack, "candidate-1")
+
+    assert listed[0]["candidate_id"] == "candidate-1"
+    assert listed[0]["status"] == "candidate"
+    assert loaded["path"] == result["path"]
+    assert improvement_is_promotable(loaded)
 
 
 def test_promotion_archives_previous_spec_and_bumps_patch_version(tmp_path: Path) -> None:

@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prompt OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Sora:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --walnut: #16110d;
+      --walnut-2: #211b15;
+      --rule: rgba(243, 234, 216, 0.12);
+      --paper: #f3ead8;
+      --paper-2: #e7dcc6;
+      --ink: #1c1610;
+      --type: #f6efe2;
+      --mute: #b7a78d;
+      --copper: #d06a2b;
+      --copper-2: #f0a36a;
+      --moss: #3f7a52;
+      --moss-2: #8fbf96;
+      --rose: #b54a44;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(208, 106, 43, 0.16), transparent 50%),
+        radial-gradient(900px 500px at 110% 10%, rgba(143, 191, 150, 0.08), transparent 45%),
+        var(--walnut);
+      color: var(--type);
+      font-family: "Sora", "Avenir Next", "Segoe UI", sans-serif;
+      letter-spacing: 0.01em;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.07;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 18rem minmax(0, 1fr);
+      min-height: 100%;
+    }
+
+    .rail {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--rule);
+      background: linear-gradient(180deg, var(--walnut-2), var(--walnut));
+      padding: 1.4rem 1.1rem 1rem;
+      min-height: 100vh;
+    }
+    .brand-mark {
+      font-family: "Fraunces", "Iowan Old Style", Palatino, serif;
+      font-size: 1.7rem;
+      font-weight: 700;
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+    }
+    .brand-mark span { color: var(--copper-2); }
+    .brand-kicker {
+      margin: 0.45rem 0 1.4rem;
+      color: var(--mute);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .apps {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      flex: 1;
+      overflow: auto;
+    }
+    .app-btn {
+      appearance: none;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--type);
+      text-align: left;
+      padding: 0.7rem 0.75rem;
+      border-radius: 0.4rem;
+      cursor: pointer;
+      font: inherit;
+    }
+    .app-btn:hover, .app-btn[aria-current="true"] {
+      background: rgba(243, 234, 216, 0.06);
+      border-color: var(--rule);
+    }
+    .app-btn[aria-current="true"] { border-left: 3px solid var(--copper); }
+    .app-btn strong { display: block; font-weight: 500; }
+    .app-btn small {
+      display: block;
+      margin-top: 0.2rem;
+      color: var(--mute);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 0.72rem;
+    }
+    .colophon {
+      color: var(--mute);
+      font-size: 0.72rem;
+      line-height: 1.45;
+      padding-top: 1rem;
+      border-top: 1px solid var(--rule);
+    }
+
+    .workspace { display: flex; flex-direction: column; min-width: 0; min-height: 100vh; }
+    .workspace-head, .tabs {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--rule);
+    }
+    .identity { min-width: 0; flex: 1; }
+    .identity h1 {
+      margin: 0;
+      font-family: "Fraunces", Palatino, serif;
+      font-size: 1.55rem;
+      font-weight: 500;
+      letter-spacing: -0.03em;
+    }
+    .identity p {
+      margin: 0.2rem 0 0;
+      color: var(--mute);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 0.78rem;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      color: var(--mute);
+      font-size: 0.82rem;
+    }
+    .controls input[type="text"] {
+      width: 13rem;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--rule);
+      color: var(--type);
+      font: inherit;
+      padding: 0.2rem 0;
+    }
+    .controls label { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+
+    .tabs { gap: 0.35rem; }
+    .tabs button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--mute);
+      font: inherit;
+      padding: 0.35rem 0.7rem;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .tabs button[aria-selected="true"] {
+      background: var(--paper);
+      color: var(--ink);
+    }
+
+    .panel { display: none; flex: 1; min-height: 0; }
+    .panel.active { display: flex; flex-direction: column; }
+
+    .talk {
+      background:
+        linear-gradient(180deg, rgba(22, 17, 13, 0.18), transparent 8%),
+        var(--paper);
+      color: var(--ink);
+    }
+    .conversation {
+      flex: 1;
+      overflow: auto;
+      padding: 1.5rem 8% 1rem;
+    }
+    .message { margin: 0 0 1.15rem; max-width: 48rem; }
+    .message.user { margin-left: auto; }
+    .who {
+      font-size: 0.72rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #7a6a55;
+      margin-bottom: 0.35rem;
+    }
+    .bubble {
+      padding: 0.85rem 1rem;
+      border-radius: 0.2rem 1rem 1rem 1rem;
+      background: #fffaf1;
+      box-shadow: 0 1px 0 rgba(28, 22, 16, 0.08);
+    }
+    .message.user .bubble {
+      background: #1c1610;
+      color: var(--paper);
+      border-radius: 1rem 0.2rem 1rem 1rem;
+    }
+    .message.error .bubble { background: #f6d6d1; }
+    .composer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.75rem;
+      padding: 0.9rem 8% 1.2rem;
+      border-top: 1px solid rgba(28, 22, 16, 0.08);
+      background: #efe6d4;
+    }
+    textarea {
+      resize: none;
+      min-height: 3.2rem;
+      max-height: 9rem;
+      border: 0;
+      background: #fffaf1;
+      color: var(--ink);
+      font: inherit;
+      padding: 0.8rem 0.9rem;
+      border-radius: 0.7rem;
+    }
+    textarea:focus, input:focus, button:focus-visible {
+      outline: 2px solid var(--copper);
+      outline-offset: 2px;
+    }
+    .talk-tools {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.7rem 8% 0;
+    }
+
+    button.action, button.ghost {
+      appearance: none;
+      font: inherit;
+      cursor: pointer;
+      border-radius: 999px;
+      padding: 0.65rem 1rem;
+    }
+    button.action {
+      border: 0;
+      background: var(--copper);
+      color: #fff8ef;
+      font-weight: 600;
+    }
+    button.action:disabled { opacity: 0.45; cursor: wait; }
+    button.ghost {
+      border: 1px solid currentColor;
+      background: transparent;
+      color: inherit;
+    }
+    .talk .ghost { color: #6d5d48; }
+
+    .view {
+      margin: 0 0 0.8rem;
+      padding: 0.9rem 1rem;
+      border: 1px solid rgba(28, 22, 16, 0.12);
+      background: rgba(255, 250, 241, 0.7);
+    }
+    .view h3, .view h4 {
+      margin: 0 0 0.6rem;
+      font-family: "Fraunces", Palatino, serif;
+      font-weight: 500;
+    }
+    .metrics { display: flex; flex-wrap: wrap; gap: 0.7rem; }
+    .metric {
+      min-width: 8rem;
+      padding: 0.7rem 0.8rem;
+      background: #1c1610;
+      color: var(--paper);
+    }
+    .metric .label { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mute); }
+    .metric .value {
+      font-family: "Fraunces", Palatino, serif;
+      font-size: 1.6rem;
+      margin-top: 0.15rem;
+    }
+    .metric .detail { color: var(--copper-2); font-size: 0.8rem; }
+    table.view-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    table.view-table th, table.view-table td {
+      border-bottom: 1px solid rgba(28, 22, 16, 0.12);
+      padding: 0.4rem 0.5rem;
+      text-align: left;
+    }
+    .bar { display: grid; grid-template-columns: 8rem 1fr 5rem; gap: 0.6rem; align-items: center; margin: 0.35rem 0; }
+    .bar-track { height: 0.55rem; background: rgba(28, 22, 16, 0.1); }
+    .bar-fill { display: block; height: 100%; background: var(--copper); }
+    .md p { margin: 0 0 0.6rem; }
+    .md ul { margin: 0 0 0.6rem; padding-left: 1.1rem; }
+    .md code, .debug, .diff {
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 0.82rem;
+    }
+    .debug {
+      white-space: pre-wrap;
+      color: #6d5d48;
+      margin-top: 0.6rem;
+    }
+
+    .ledger {
+      padding: 1.4rem 8% 2rem;
+      overflow: auto;
+    }
+    .ledger h2 {
+      font-family: "Fraunces", Palatino, serif;
+      font-weight: 500;
+      font-size: 1.6rem;
+      margin: 0 0 0.4rem;
+    }
+    .ledger .lede { color: var(--mute); max-width: 40rem; margin-bottom: 1.2rem; }
+    .card {
+      background: rgba(243, 234, 216, 0.05);
+      border: 1px solid var(--rule);
+      padding: 1rem 1.1rem;
+      margin: 0 0 1rem;
+      border-radius: 0.4rem;
+    }
+    .row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin: 0.8rem 0; }
+    select {
+      background: var(--walnut-2);
+      color: var(--type);
+      border: 1px solid var(--rule);
+      font: inherit;
+      padding: 0.45rem 0.6rem;
+      border-radius: 0.4rem;
+    }
+    .functionality, .diff {
+      white-space: pre-wrap;
+      background: #0f0c0a;
+      color: #f3ead8;
+      padding: 1rem;
+      overflow: auto;
+      line-height: 1.5;
+    }
+    .diff .add { color: var(--moss-2); }
+    .diff .del { color: #e08a84; }
+    .diff .meta { color: var(--mute); }
+    .pill {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border: 1px solid var(--rule);
+      border-radius: 999px;
+      font-size: 0.75rem;
+      color: var(--mute);
+      font-family: "Fragment Mono", ui-monospace, monospace;
+    }
+    .pill.ok { color: var(--moss-2); border-color: rgba(143, 191, 150, 0.4); }
+    .pill.bad { color: #e08a84; border-color: rgba(181, 74, 68, 0.5); }
+    .status {
+      min-height: 1.4rem;
+      padding: 0 1.5rem 0.8rem;
+      color: var(--mute);
+      font-size: 0.82rem;
+    }
+    .status.error { color: #e08a84; }
+    .empty {
+      margin: auto;
+      padding: 4rem 2rem;
+      text-align: left;
+      max-width: 28rem;
+    }
+    .empty h2 {
+      font-family: "Fraunces", Palatino, serif;
+      font-size: 2.4rem;
+      font-weight: 500;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      margin: 0 0 0.8rem;
+    }
+    .banner {
+      margin: 0 1.5rem 0;
+      padding: 0.7rem 0.9rem;
+      border: 1px dashed var(--copper);
+      color: var(--copper-2);
+      font-size: 0.88rem;
+    }
+    .checks { list-style: none; padding: 0; margin: 0.6rem 0; }
+    .checks li { margin: 0.25rem 0; font-family: "Fragment Mono", ui-monospace, monospace; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="brand-mark">Prompt <span>OS</span></div>
+      <p class="brand-kicker">local operator desk</p>
+      <nav class="apps" id="apps" aria-label="Applications"></nav>
+      <p class="colophon">Conversation, specification, replay and promotion. Clients render generic views; they do not invent product rules.</p>
+    </aside>
+    <main class="workspace">
+      <div class="banner" id="runtime-banner" hidden></div>
+      <header class="workspace-head">
+        <div class="identity">
+          <h1 id="app-name">Choose an application</h1>
+          <p id="app-meta">Generic views · explicit promotion</p>
+        </div>
+        <div class="controls">
+          <label>Timezone
+            <input id="timezone" type="text" spellcheck="false">
+          </label>
+          <label><input id="debug" type="checkbox"> Tools</label>
+        </div>
+      </header>
+      <nav class="tabs" id="tabs" hidden>
+        <button data-tab="talk" aria-selected="true">Talk</button>
+        <button data-tab="functionality">Functionality</button>
+        <button data-tab="improve">Improve</button>
+        <button data-tab="contract">Contract</button>
+        <button data-tab="evaluate">Evaluate</button>
+      </nav>
+      <section class="panel active" id="panel-empty">
+        <div class="empty">
+          <h2>A desk for small applications written in ordinary language.</h2>
+          <p>Pick an application at left. Talk to it, review its specification, then improve or promote only after replay.</p>
+        </div>
+      </section>
+      <section class="panel talk" id="panel-talk">
+        <div class="talk-tools">
+          <button class="ghost" id="clear-talk" type="button">Clear</button>
+          <button class="ghost" id="reset-session" type="button">New session</button>
+        </div>
+        <div class="conversation" id="conversation"></div>
+        <form class="composer" id="composer">
+          <textarea id="prompt" placeholder="Write a request and press Enter" rows="2"></textarea>
+          <button class="action" id="send" type="submit">Send</button>
+        </form>
+      </section>
+      <section class="panel" id="panel-functionality">
+        <div class="ledger">
+          <h2>Business specification</h2>
+          <p class="lede">This is the current production functionality. Live conversation cannot overwrite it.</p>
+          <pre class="functionality" id="functionality"></pre>
+        </div>
+      </section>
+      <section class="panel" id="panel-improve">
+        <div class="ledger">
+          <h2>Improve from traces</h2>
+          <p class="lede">Propose one narrow specification change, replay the business cases, then promote it explicitly. A regression cannot be installed.</p>
+          <div class="row">
+            <label>Trace limit <input id="trace-limit" type="text" value="20" style="width:4rem;background:transparent;border:0;border-bottom:1px solid var(--rule);color:var(--type);font:inherit;"></label>
+            <button class="action" id="propose-improve" type="button">Propose improvement</button>
+          </div>
+          <div id="improve-list"></div>
+          <div id="improve-detail"></div>
+        </div>
+      </section>
+      <section class="panel" id="panel-contract">
+        <div class="ledger">
+          <h2>Data contract</h2>
+          <p class="lede">Generated candidates stay inert until replayed and promoted. Promotion is an operator action, not a live-conversation tool.</p>
+          <div class="row">
+            <button class="action" id="review-contract" type="button">Review candidate</button>
+            <button class="ghost" id="promote-contract" type="button" disabled>Promote contract</button>
+          </div>
+          <div id="contract-detail"></div>
+        </div>
+      </section>
+      <section class="panel" id="panel-evaluate">
+        <div class="ledger">
+          <h2>Evaluate</h2>
+          <p class="lede">Replay isolated cases against the current specification. This does not promote anything.</p>
+          <div class="row">
+            <select id="eval-suite">
+              <option value="smoke">smoke</option>
+              <option value="contracts">contracts</option>
+              <option value="all">all</option>
+            </select>
+            <button class="action" id="run-eval" type="button">Run evaluation</button>
+          </div>
+          <div id="eval-detail"></div>
+        </div>
+      </section>
+      <div class="status" id="status" aria-live="polite">Ready</div>
+    </main>
+  </div>
+  <script>
+    const state = {
+      apps: [],
+      selected: null,
+      detail: null,
+      tab: "talk",
+      messages: [],
+      busy: false,
+      contract: null,
+      improvement: null,
+    };
+
+    const els = {
+      apps: document.getElementById("apps"),
+      name: document.getElementById("app-name"),
+      meta: document.getElementById("app-meta"),
+      tabs: document.getElementById("tabs"),
+      empty: document.getElementById("panel-empty"),
+      conversation: document.getElementById("conversation"),
+      prompt: document.getElementById("prompt"),
+      send: document.getElementById("send"),
+      timezone: document.getElementById("timezone"),
+      debug: document.getElementById("debug"),
+      status: document.getElementById("status"),
+      functionality: document.getElementById("functionality"),
+      improveList: document.getElementById("improve-list"),
+      improveDetail: document.getElementById("improve-detail"),
+      contractDetail: document.getElementById("contract-detail"),
+      evalDetail: document.getElementById("eval-detail"),
+      promoteContract: document.getElementById("promote-contract"),
+      banner: document.getElementById("runtime-banner"),
+      traceLimit: document.getElementById("trace-limit"),
+    };
+
+    els.timezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+
+    document.getElementById("composer").addEventListener("submit", (event) => {
+      event.preventDefault();
+      sendMessage();
+    });
+    els.prompt.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+    document.getElementById("clear-talk").addEventListener("click", () => {
+      state.messages = [];
+      renderConversation();
+    });
+    document.getElementById("reset-session").addEventListener("click", resetSession);
+    document.getElementById("propose-improve").addEventListener("click", proposeImprovement);
+    document.getElementById("review-contract").addEventListener("click", reviewContract);
+    document.getElementById("promote-contract").addEventListener("click", promoteContract);
+    document.getElementById("run-eval").addEventListener("click", runEvaluation);
+    els.tabs.addEventListener("click", (event) => {
+      const button = event.target.closest("button[data-tab]");
+      if (button) setTab(button.dataset.tab);
+    });
+
+    async function api(method, path, body) {
+      const options = { method, headers: {} };
+      if (body !== undefined) {
+        options.headers["Content-Type"] = "application/json";
+        options.body = JSON.stringify(body);
+      }
+      const response = await fetch(path, options);
+      const text = await response.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = { error: text }; }
+      if (!response.ok) throw new Error((data && data.error) || response.statusText);
+      return data;
+    }
+
+    function setStatus(text, isError = false) {
+      els.status.textContent = text;
+      els.status.classList.toggle("error", isError);
+    }
+
+    function setBusy(busy, label) {
+      state.busy = busy;
+      els.send.disabled = busy;
+      els.prompt.disabled = busy;
+      document.getElementById("propose-improve").disabled = busy;
+      document.getElementById("review-contract").disabled = busy;
+      document.getElementById("run-eval").disabled = busy;
+      setStatus(busy ? (label || "Working…") : "Ready");
+    }
+
+    function escapeHtml(text) {
+      return String(text).replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[char]));
+    }
+
+    function inlineMarkdown(text) {
+      return text
+        .replace(/`([^`]+)`/g, "<code>$1</code>")
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    }
+
+    function renderMarkdown(source) {
+      const escaped = escapeHtml(source || "").replace(/\r\n/g, "\n");
+      const chunks = escaped.split(/```(?:[a-z0-9_-]*)\n?/i);
+      let html = "";
+      for (let i = 0; i < chunks.length; i += 1) {
+        if (i % 2 === 1) {
+          html += `<pre><code>${chunks[i].replace(/\n$/, "")}</code></pre>`;
+          continue;
+        }
+        const lines = chunks[i].split("\n");
+        let list = [];
+        const flush = () => {
+          if (list.length) {
+            html += `<ul>${list.join("")}</ul>`;
+            list = [];
+          }
+        };
+        for (const line of lines) {
+          const heading = /^(#{1,4}) (.+)$/.exec(line);
+          if (heading) {
+            flush();
+            html += `<h${heading[1].length}>${inlineMarkdown(heading[2])}</h${heading[1].length}>`;
+            continue;
+          }
+          const item = /^[-*] (.+)$/.exec(line);
+          if (item) {
+            list.push(`<li>${inlineMarkdown(item[1])}</li>`);
+            continue;
+          }
+          if (!line.trim()) { flush(); continue; }
+          flush();
+          html += `<p>${inlineMarkdown(line)}</p>`;
+        }
+        flush();
+      }
+      return `<div class="md">${html}</div>`;
+    }
+
+    function renderView(view) {
+      if (!view) return "";
+      const blocks = (view.blocks || []).map((block) => {
+        if (block.type === "text") return renderMarkdown(block.markdown);
+        if (block.type === "metric") {
+          return `<div class="metrics"><div class="metric"><div class="label">${escapeHtml(block.label)}</div><div class="value">${escapeHtml(block.value)}</div>${block.detail ? `<div class="detail">${escapeHtml(block.detail)}</div>` : ""}</div></div>`;
+        }
+        if (block.type === "list") {
+          const items = (block.items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+          return `${block.title ? `<h4>${escapeHtml(block.title)}</h4>` : ""}<ul>${items}</ul>`;
+        }
+        if (block.type === "table") {
+          const head = (block.columns || []).map((col) => `<th>${escapeHtml(col)}</th>`).join("");
+          const rows = (block.rows || []).map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("");
+          return `${block.title ? `<h4>${escapeHtml(block.title)}</h4>` : ""}<table class="view-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+        }
+        if (block.type === "bar-chart") {
+          const series = block.series || [];
+          const max = Math.max(1, ...series.map((item) => Math.abs(Number(item.value) || 0)));
+          const rows = series.map((item) => {
+            const width = Math.max(0, Math.round((Math.abs(Number(item.value) || 0) / max) * 100));
+            return `<div class="bar"><span>${escapeHtml(item.label)}</span><span class="bar-track"><span class="bar-fill" style="width:${width}%"></span></span><span>${escapeHtml(item.display || String(item.value))}</span></div>`;
+          }).join("");
+          return `${block.title ? `<h4>${escapeHtml(block.title)}</h4>` : ""}${rows}`;
+        }
+        return "";
+      }).join("");
+      return `<section class="view">${view.title ? `<h3>${escapeHtml(view.title)}</h3>` : ""}${blocks}</section>`;
+    }
+
+    function renderDiff(diff) {
+      if (!diff) return "<p class='lede'>No textual changes.</p>";
+      const lines = diff.split("\n").map((line) => {
+        let kind = "";
+        if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) kind = "meta";
+        else if (line.startsWith("+")) kind = "add";
+        else if (line.startsWith("-")) kind = "del";
+        return `<span class="${kind}">${escapeHtml(line) || " "}</span>`;
+      });
+      return `<pre class="diff">${lines.join("\n")}</pre>`;
+    }
+
+    function renderConversation() {
+      els.conversation.innerHTML = state.messages.map((item) => {
+        if (item.role === "error") {
+          return `<article class="message error"><div class="who">Error</div><div class="bubble">${escapeHtml(item.text)}</div></article>`;
+        }
+        if (item.role === "user") {
+          return `<article class="message user"><div class="who">You</div><div class="bubble">${escapeHtml(item.text)}</div></article>`;
+        }
+        const tools = item.tool_calls ? `<pre class="debug">${escapeHtml(JSON.stringify(item.tool_calls, null, 2))}</pre>` : "";
+        return `<article class="message assistant"><div class="who">App</div><div class="bubble">${renderView(item.view)}${renderMarkdown(item.text)}${tools}</div></article>`;
+      }).join("");
+      els.conversation.scrollTop = els.conversation.scrollHeight;
+    }
+
+    function renderApps() {
+      els.apps.innerHTML = state.apps.map((app) => `
+        <button class="app-btn" type="button" data-id="${escapeHtml(app.id)}" aria-current="${state.selected === app.id}">
+          <strong>${escapeHtml(app.name)}</strong>
+          <small>${escapeHtml(app.version)} · ${escapeHtml(app.data_policy)}</small>
+        </button>
+      `).join("");
+      els.apps.querySelectorAll(".app-btn").forEach((button) => {
+        button.addEventListener("click", () => selectApp(button.dataset.id));
+      });
+    }
+
+    function showPanel(name) {
+      document.querySelectorAll(".panel").forEach((panel) => panel.classList.remove("active"));
+      const empty = !state.selected;
+      els.empty.classList.toggle("active", empty);
+      els.tabs.hidden = empty;
+      if (!empty) document.getElementById(`panel-${name}`).classList.add("active");
+    }
+
+    function setTab(tab) {
+      state.tab = tab;
+      els.tabs.querySelectorAll("button").forEach((button) => {
+        button.setAttribute("aria-selected", button.dataset.tab === tab ? "true" : "false");
+      });
+      showPanel(tab);
+    }
+
+    async function selectApp(appId) {
+      state.selected = appId;
+      state.messages = [];
+      state.improvement = null;
+      state.contract = null;
+      renderApps();
+      renderConversation();
+      els.improveDetail.innerHTML = "";
+      els.evalDetail.innerHTML = "";
+      const detail = await api("GET", `/api/apps/${encodeURIComponent(appId)}`);
+      state.detail = detail;
+      els.name.textContent = detail.name;
+      els.meta.textContent = `${detail.id} · ${detail.version} · ${detail.trace_mode} traces`;
+      els.functionality.textContent = detail.functionality;
+      renderImproveList(detail.improvements || []);
+      setTab(state.tab === "talk" ? "talk" : state.tab);
+      setStatus("Ready");
+    }
+
+    async function sendMessage() {
+      const message = els.prompt.value.trim();
+      if (!message || !state.selected || state.busy) return;
+      els.prompt.value = "";
+      state.messages.push({ role: "user", text: message });
+      renderConversation();
+      setBusy(true, "Working…");
+      try {
+        const result = await api("POST", `/api/apps/${encodeURIComponent(state.selected)}/chat`, {
+          message,
+          timezone: els.timezone.value.trim() || "UTC",
+          debug: els.debug.checked,
+        });
+        state.messages.push({
+          role: "assistant",
+          text: result.reply,
+          view: result.view,
+          tool_calls: result.tool_calls,
+        });
+      } catch (error) {
+        state.messages.push({ role: "error", text: error.message });
+        setStatus(error.message, true);
+      } finally {
+        renderConversation();
+        setBusy(false);
+        els.prompt.focus();
+      }
+    }
+
+    async function resetSession() {
+      if (!state.selected) return;
+      await api("POST", `/api/apps/${encodeURIComponent(state.selected)}/session/reset`);
+      state.messages = [];
+      renderConversation();
+      setStatus("New session");
+    }
+
+    function renderImproveList(candidates) {
+      if (!candidates.length) {
+        els.improveList.innerHTML = "<p class='lede'>No saved candidates yet.</p>";
+        return;
+      }
+      els.improveList.innerHTML = candidates.map((item) => `
+        <button class="card" type="button" data-candidate="${escapeHtml(item.candidate_id)}" style="width:100%;text-align:left;color:inherit;cursor:pointer;">
+          <strong>${escapeHtml(item.summary || item.candidate_id)}</strong>
+          <div class="row">
+            <span class="pill">${escapeHtml(item.status || "")}</span>
+            <span class="pill">${escapeHtml(item.candidate_id)}</span>
+          </div>
+        </button>
+      `).join("");
+      els.improveList.querySelectorAll("[data-candidate]").forEach((button) => {
+        button.addEventListener("click", () => loadImprovement(button.dataset.candidate));
+      });
+    }
+
+    function renderImprovement(payload) {
+      state.improvement = payload;
+      if (payload.status === "no-change") {
+        els.improveDetail.innerHTML = `<div class="card"><p>${escapeHtml(payload.summary || "No change proposed.")}</p><p class="lede">${escapeHtml(payload.rationale || "")}</p></div>`;
+        return;
+      }
+      const baseline = payload.baseline || {};
+      const candidate = payload.candidate || {};
+      const promote = payload.promotable
+        ? `<button class="action" id="promote-improve" type="button">Promote improvement</button>`
+        : `<span class="pill bad">not promotable</span>`;
+      els.improveDetail.innerHTML = `
+        <div class="card">
+          <h3 style="font-family:Fraunces,serif;margin:0 0 .4rem">${escapeHtml(payload.summary || "Proposal")}</h3>
+          <p class="lede">${escapeHtml(payload.rationale || "")}</p>
+          <div class="row">
+            <span class="pill">current ${baseline.passed || 0}/${baseline.total || 0}</span>
+            <span class="pill">candidate ${candidate.passed || 0}/${candidate.total || 0}</span>
+            ${payload.recommended ? `<span class="pill ok">measured improvement</span>` : ""}
+          </div>
+          <div class="row">${promote}</div>
+          ${renderDiff(payload.diff || "")}
+        </div>
+      `;
+      const button = document.getElementById("promote-improve");
+      if (button) button.addEventListener("click", promoteImprovement);
+    }
+
+    async function proposeImprovement() {
+      if (!state.selected || state.busy) return;
+      setBusy(true, "Proposing and replaying… this can take several minutes.");
+      try {
+        const payload = await api("POST", `/api/apps/${encodeURIComponent(state.selected)}/improve`, {
+          trace_limit: Number(els.traceLimit.value || 20),
+        });
+        renderImprovement(payload);
+        const detail = await api("GET", `/api/apps/${encodeURIComponent(state.selected)}`);
+        state.detail = detail;
+        renderImproveList(detail.improvements || []);
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function loadImprovement(candidateId) {
+      const payload = await api("GET", `/api/apps/${encodeURIComponent(state.selected)}/improvements/${encodeURIComponent(candidateId)}`);
+      renderImprovement(payload);
+    }
+
+    async function promoteImprovement() {
+      if (!state.improvement || !state.improvement.candidate_id) return;
+      if (!window.confirm("Promote this improvement into production? The current specification will be archived.")) return;
+      setBusy(true, "Promoting…");
+      try {
+        const result = await api(
+          "POST",
+          `/api/apps/${encodeURIComponent(state.selected)}/improve/${encodeURIComponent(state.improvement.candidate_id)}/promote`
+        );
+        setStatus(`Promoted ${result.from_version} → ${result.to_version}`);
+        await selectApp(state.selected);
+        setTab("improve");
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function renderContract(payload) {
+      state.contract = payload;
+      const current = payload.current
+        ? `<p>Current contract version <span class="pill">${escapeHtml(payload.current.version)}</span></p>`
+        : "<p class='lede'>No promoted contract yet. Early records stay in the inbox.</p>";
+      const candidates = (payload.candidates || []).map((item) =>
+        `<li><span class="pill">${escapeHtml(item.id)}</span> ${escapeHtml(item.rationale || "")}</li>`
+      ).join("") || "<li>No candidates.</li>";
+      let review = "";
+      if (payload.review) {
+        const checks = (payload.review.replay.checks || []).map((check) =>
+          `<li><span class="pill ${check.passed ? "ok" : "bad"}">${check.passed ? "PASS" : "FAIL"}</span> ${escapeHtml(check.name)}${check.detail ? ": " + escapeHtml(check.detail) : ""}</li>`
+        ).join("");
+        review = `<h3 style="font-family:Fraunces,serif">Candidate ${escapeHtml(payload.review.candidate_id)}</h3><ul class="checks">${checks}</ul><pre class="functionality">${escapeHtml(JSON.stringify(payload.review.contract, null, 2))}</pre>`;
+      }
+      els.contractDetail.innerHTML = `<div class="card">${current}<ul class="checks">${candidates}</ul>${review}</div>`;
+      els.promoteContract.disabled = !payload.promotable;
+    }
+
+    async function reviewContract() {
+      if (!state.selected || state.busy) return;
+      setBusy(true, "Replaying contract candidate…");
+      try {
+        const payload = await api("GET", `/api/apps/${encodeURIComponent(state.selected)}/contract`);
+        renderContract(payload);
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function promoteContract() {
+      if (!state.selected || !state.contract || !state.contract.review) return;
+      if (!window.confirm("Promote this data contract? This is an explicit operator action.")) return;
+      setBusy(true, "Promoting contract…");
+      try {
+        const result = await api("POST", `/api/apps/${encodeURIComponent(state.selected)}/contract/promote`, {
+          candidate_id: state.contract.review.candidate_id,
+        });
+        setStatus(`Promoted data contract ${result.version || ""}`.trim());
+        await selectApp(state.selected);
+        setTab("contract");
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function runEvaluation() {
+      if (!state.selected || state.busy) return;
+      setBusy(true, "Evaluating… this can take several minutes.");
+      try {
+        const payload = await api("POST", `/api/apps/${encodeURIComponent(state.selected)}/eval`, {
+          suite: document.getElementById("eval-suite").value,
+        });
+        const rows = (payload.cases || []).map((item) =>
+          `<li><span class="pill ${item.passed ? "ok" : "bad"}">${item.passed ? "PASS" : "FAIL"}</span> ${escapeHtml(item.id)} — ${escapeHtml(item.detail)}</li>`
+        ).join("");
+        els.evalDetail.innerHTML = `<div class="card"><p>${payload.passed}/${payload.total} cases passed</p><ul class="checks">${rows}</ul></div>`;
+      } catch (error) {
+        setStatus(error.message, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function boot() {
+      try {
+        const runtime = await api("GET", "/api/runtime");
+        if (!runtime.configured) {
+          els.banner.hidden = false;
+          els.banner.textContent = `Model settings missing. ${runtime.error}. Add LITELLM_* to .env before talking, improving or evaluating.`;
+        } else {
+          els.banner.hidden = true;
+        }
+        const payload = await api("GET", "/api/apps");
+        state.apps = payload.apps || [];
+        renderApps();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    boot();
+  </script>
+</body>
+</html>

@@ -197,6 +197,59 @@ def format_improvement_proposal(pack: AppPack, result: dict[str, Any]) -> str:
     )
 
 
+def list_improvement_candidates(root: Path, pack: AppPack) -> list[dict[str, Any]]:
+    directory = root / "var" / "improvements" / pack.id
+    if not directory.is_dir():
+        return []
+    records: list[dict[str, Any]] = []
+    for candidate_root in sorted(directory.iterdir(), reverse=True):
+        report_path = candidate_root / "report.json"
+        if not candidate_root.is_dir() or not report_path.is_file():
+            continue
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(report, dict):
+            continue
+        records.append(
+            {
+                "candidate_id": str(report.get("candidate_id") or candidate_root.name),
+                "status": report.get("status"),
+                "summary": report.get("summary"),
+                "rationale": report.get("rationale"),
+                "created_at": report.get("created_at"),
+                "recommended": report.get("recommended"),
+                "source_version": report.get("source_version"),
+                "to_version": report.get("to_version"),
+            }
+        )
+    return records
+
+
+def load_improvement_candidate(
+    root: Path, pack: AppPack, candidate_id: str
+) -> dict[str, Any]:
+    if not CANDIDATE_ID.fullmatch(candidate_id):
+        raise ValueError("invalid improvement candidate")
+    candidate_root = root / "var" / "improvements" / pack.id / candidate_id
+    report_path = candidate_root / "report.json"
+    if not report_path.is_file():
+        raise KeyError(f"improvement candidate {candidate_id!r} was not found")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    if not isinstance(report, dict):
+        raise ValueError("improvement candidate report is invalid")
+    return report | {"path": str(candidate_root)}
+
+
+def improvement_is_promotable(result: dict[str, Any]) -> bool:
+    return (
+        result.get("status") == "candidate"
+        and _has_completed_replay(result)
+        and _has_no_regressions(result["baseline"], result["candidate"])
+    )
+
+
 def promote_improvement(root: Path, pack: AppPack, result: dict[str, Any]) -> dict[str, Any]:
     """Promote a replayed candidate and retain an immutable snapshot of production."""
     candidate_id = str(result.get("candidate_id", ""))

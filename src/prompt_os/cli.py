@@ -32,6 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
     tui.add_argument("app_id")
     tui.add_argument("--timezone", default="UTC")
     tui.add_argument("--debug", action="store_true", help="show tool activity")
+    web = commands.add_parser("web", help="run a local browser interface")
+    web.add_argument("--host", default="127.0.0.1")
+    web.add_argument("--port", type=int, default=8765)
+    web.add_argument("--open", action="store_true", help="open the interface in a browser")
     improve = commands.add_parser("improve", help="propose and replay one trace-based improvement")
     improve.add_argument("app_id")
     improve.add_argument("--trace-limit", type=int, default=20)
@@ -97,6 +101,16 @@ def main(argv: list[str] | None = None) -> int:
         try:
             return run_tui(
                 Path.cwd(), pack, timezone=args.timezone, debug=args.debug
+            )
+        except (OSError, ValueError, RuntimeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+    if args.command == "web":
+        from .web import run_web
+
+        try:
+            return run_web(
+                Path.cwd(), host=args.host, port=args.port, open_browser=args.open
             )
         except (OSError, ValueError, RuntimeError) as exc:
             print(f"error: {exc}", file=sys.stderr)

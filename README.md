@@ -84,6 +84,15 @@ uv run prompt-os tui expense-log --timezone Europe/Amsterdam
 
 The TUI is a generic conversation renderer: its title and behaviour come from the selected application pack. The model may describe results using generic metrics, lists, tables and bar charts, which the TUI renders as native terminal components without predefined application fields, categories or workflows. Use `Ctrl+L` to clear the visible conversation, `Ctrl+Q` to quit, or add `--debug` to show tool activity after replies.
 
+Run the same generic client in a local browser:
+
+```bash
+uv run prompt-os web
+uv run prompt-os web --port 8765 --open
+```
+
+The server binds to `127.0.0.1` by default. Open http://127.0.0.1:8765 to pick an application, talk to it, inspect its specification, propose an improvement from traces, review a generated data contract, or run isolated evaluations. Promotion still requires an explicit operator action after replay.
+
 Application capabilities also constrain the fundamental tools exposed to the model. Unknown or unimplemented capabilities fail validation. The shared services include documents and revision history, deterministic aggregation, term-based retrieval, clocks, bounded arithmetic, and deterministic measurement conversion. The runtime declines requests outside the application's business functionality.
 
 ## Generated data contracts

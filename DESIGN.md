@@ -49,7 +49,7 @@ The view vocabulary contains no application fields, categories or workflows. A t
 4. Trace capture and semantic acceptance cases.
 5. Candidate, replay and human promotion workflow.
 6. Generic calculation, time and aggregation services.
-7. CLI presentation, followed later by TUI and browser clients.
+7. CLI, TUI and local browser clients that render the same generic views.
 
 ## Generated data-contract lifecycle
 

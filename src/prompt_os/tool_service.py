@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import ast
 from datetime import datetime
-from decimal import Decimal
 import hashlib
 import json
 from pathlib import Path
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
+from .calculate import evaluate as evaluate_expression
+from .calculate import sample as sample_expression
 from .data_contract import DataContractRepository
 from .store import DECIMAL, Document, DocumentRevision, DocumentStore
 from .units import convert
@@ -197,9 +197,20 @@ class ToolService:
         )
 
     def calculate(self, expression: str) -> dict[str, str]:
-        tree = ast.parse(expression, mode="eval")
-        value = self._evaluate_math(tree.body)
-        return {"expression": expression, "value": format(value, "f")}
+        return evaluate_expression(expression)
+
+    def sample(
+        self,
+        expression: str,
+        *,
+        start: str | int | float,
+        end: str | int | float,
+        points: int = 240,
+        variable: str = "x",
+    ) -> dict[str, Any]:
+        return sample_expression(
+            expression, start=start, end=end, points=points, variable=variable
+        )
 
     def convert(
         self, value: str | int | float, from_unit: str, to_unit: str
@@ -250,6 +261,13 @@ class ToolService:
                 evidence=arguments["evidence"],
             ),
             "math.evaluate": lambda: self.calculate(arguments["expression"]),
+            "math.sample": lambda: self.sample(
+                arguments["expression"],
+                start=arguments["start"],
+                end=arguments["end"],
+                points=arguments.get("points", 240),
+                variable=arguments.get("variable", "x"),
+            ),
             "unit.convert": lambda: self.convert(
                 arguments["value"], arguments["from_unit"], arguments["to_unit"]
             ),
@@ -257,34 +275,6 @@ class ToolService:
         if name not in dispatch:
             raise KeyError(f"unknown tool {name!r}")
         return dispatch[name]()
-
-    @staticmethod
-    def _evaluate_math(node: ast.AST) -> Decimal:
-        if (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, (int, float))
-            and not isinstance(node.value, bool)
-        ):
-            return Decimal(str(node.value))
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
-            value = ToolService._evaluate_math(node.operand)
-            return value if isinstance(node.op, ast.UAdd) else -value
-        if isinstance(node, ast.BinOp):
-            left = ToolService._evaluate_math(node.left)
-            right = ToolService._evaluate_math(node.right)
-            if isinstance(node.op, ast.Add):
-                return left + right
-            if isinstance(node.op, ast.Sub):
-                return left - right
-            if isinstance(node.op, ast.Mult):
-                return left * right
-            if isinstance(node.op, ast.Div):
-                return left / right
-            if isinstance(node.op, ast.Mod):
-                return left % right
-            if isinstance(node.op, ast.Pow) and right == int(right) and abs(right) <= 20:
-                return left ** int(right)
-        raise ValueError("expression contains an unsupported operation")
 
     @staticmethod
     def _validate_document(

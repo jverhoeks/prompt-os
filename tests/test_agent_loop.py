@@ -98,7 +98,9 @@ def test_application_capabilities_limit_exposed_tools() -> None:
     assert "store.aggregate" in expense_tools
     assert "system.now" in expense_tools
     assert "math.evaluate" not in expense_tools
+    assert "math.sample" not in expense_tools
     assert "math.evaluate" in calculator_tools
+    assert "math.sample" in calculator_tools
     assert "unit.convert" in calculator_tools
     assert "store.put" not in calculator_tools
     assert "view.present" in expense_tools

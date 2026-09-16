@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -8,16 +9,35 @@ from rich.table import Table
 from rich.text import Text
 from textual import work
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.message import Message
-from textual.widgets import DataTable, Footer, Header, Input, Label, Markdown, Static
+from textual.widgets import (
+    Button,
+    Checkbox,
+    ContentSwitcher,
+    DataTable,
+    Footer,
+    Header,
+    Input,
+    Label,
+    Markdown,
+    Static,
+)
 
 from .agent_loop import StrandsSession
 from .app_pack import AppPack
 from .model_client import LiteLLMConfig, check_model
 from .tracing import TraceWriter, utc_now
+from .workspace import (
+    FormDescription,
+    capture_document,
+    distill_workspace,
+    parse_field_value,
+)
 from .view_description import (
     BarChartBlock,
+    LineChartBlock,
     ListBlock,
     MetricBlock,
     TableBlock,
@@ -135,11 +155,29 @@ class PromptTUI(App[None]):
         dock: bottom;
         margin: 0 1 1 1;
     }
+
+    #modes {
+        height: 1fr;
+    }
+
+    #workspace {
+        height: 1fr;
+        padding: 1 2;
+        scrollbar-gutter: stable;
+    }
+
+    .workspace-form {
+        height: auto;
+        margin: 1 0;
+        padding: 1;
+        border: round $accent;
+    }
     """
 
     BINDINGS = [
-        ("ctrl+q", "quit", "Quit"),
-        ("ctrl+l", "clear_conversation", "Clear"),
+        Binding("ctrl+q", "quit", "Quit"),
+        Binding("ctrl+l", "clear_conversation", "Clear"),
+        Binding("ctrl+w", "toggle_workspace", "Workspace", priority=True),
     ]
 
     def __init__(
@@ -150,20 +188,28 @@ class PromptTUI(App[None]):
         trace: TraceWriter,
         model: str,
         debug: bool = False,
+        root: Path | None = None,
+        timezone: str = "UTC",
     ) -> None:
         super().__init__()
         self.title = pack.name
         self.sub_title = pack.id
+        self._pack = pack
+        self._root = root
+        self._timezone = timezone
         self._session = session
         self._trace = trace
         self._model = model
         self._app_id = pack.id
         self._debug = debug
         self._busy = False
+        self._workspace_mode = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
-        yield VerticalScroll(id="conversation")
+        with ContentSwitcher(initial="conversation", id="modes"):
+            yield VerticalScroll(id="conversation")
+            yield VerticalScroll(id="workspace")
         yield Static("Ready", id="status")
         yield Input(placeholder="Type a message and press Enter", id="prompt")
         yield Footer()
@@ -238,6 +284,69 @@ class PromptTUI(App[None]):
     def action_clear_conversation(self) -> None:
         self.query_one("#conversation", VerticalScroll).remove_children()
 
+    def action_toggle_workspace(self) -> None:
+        switcher = self.query_one("#modes", ContentSwitcher)
+        prompt = self.query_one("#prompt", Input)
+        if self._workspace_mode:
+            self._workspace_mode = False
+            switcher.current = "conversation"
+            prompt.display = True
+            prompt.focus()
+            self.query_one("#status", Static).update("Ready")
+            return
+        self._workspace_mode = True
+        switcher.current = "workspace"
+        prompt.display = False
+        self._fill_workspace()
+        self.query_one("#status", Static).update("Workspace")
+
+    def _fill_workspace(self) -> None:
+        pane = self.query_one("#workspace", VerticalScroll)
+        pane.remove_children()
+        if self._root is None:
+            pane.mount(Static("Workspace is unavailable without a project root."))
+            return
+        surface = distill_workspace(self._root, self._pack, timezone=self._timezone)
+        children: list[Any] = [Label(surface.title, classes="view-title")]
+        if surface.summary:
+            children.append(Static(surface.summary, classes="view-block"))
+        children.append(Label(f"Distilled from {surface.source}", classes="message-label"))
+        if surface.view is not None:
+            children.append(_structured_view(surface.view))
+        for form in surface.forms:
+            children.append(_workspace_form(form))
+        if not surface.forms and surface.source == "stateless":
+            children.append(Static("Use conversation for this application."))
+        pane.mount(*children)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        button_id = event.button.id or ""
+        if not button_id.startswith("ws-save-") or self._root is None:
+            return
+        collection = button_id.removeprefix("ws-save-")
+        form = next(
+            (
+                item
+                for item in distill_workspace(
+                    self._root, self._pack, timezone=self._timezone
+                ).forms
+                if item.collection == collection
+            ),
+            None,
+        )
+        if form is None:
+            return
+        try:
+            document = {**form.defaults, **_read_workspace_form(self, form)}
+            capture_document(
+                self._root, self._pack, collection=form.collection, document=document
+            )
+        except (KeyError, ValueError, RuntimeError) as exc:
+            self.query_one("#status", Static).update(str(exc))
+            return
+        self._fill_workspace()
+        self.query_one("#status", Static).update("Recorded")
+
 
 def _user_message(content: str) -> Vertical:
     return Vertical(
@@ -300,7 +409,67 @@ def _structured_view(view: ViewDescription) -> Vertical:
             children.append(ViewTable(block))
         elif isinstance(block, BarChartBlock):
             children.append(Static(_bar_chart(block), classes="view-block"))
+        elif isinstance(block, LineChartBlock):
+            children.append(Static(_line_chart(block), classes="view-block"))
     return Vertical(*children, classes="structured-view")
+
+
+def _line_chart(block: LineChartBlock) -> Text:
+    width, height = 56, 15
+    samples = [
+        (item.x, item.y)
+        for item in block.series
+        if item.y is not None and math.isfinite(item.x) and math.isfinite(item.y)
+    ]
+    title = block.title or "line chart"
+    if len(samples) < 2:
+        return Text(f"{title}\nnot enough finite samples")
+    xs = [x for x, _ in samples]
+    ys = [y for _, y in samples]
+    xmin, xmax = min(xs), max(xs)
+    ymin, ymax = min(ys), max(ys)
+    if xmin == xmax:
+        xmax = xmin + 1
+    if ymin == ymax:
+        ymin -= 1
+        ymax += 1
+    grid = [[" " for _ in range(width)] for _ in range(height)]
+
+    def cell(x: float, y: float) -> tuple[int, int]:
+        column = round((x - xmin) / (xmax - xmin) * (width - 1))
+        row = round((ymax - y) / (ymax - ymin) * (height - 1))
+        return max(0, min(width - 1, column)), max(0, min(height - 1, row))
+
+    mapped = [cell(x, y) for x, y in samples]
+    for (column, row), (next_column, next_row) in zip(mapped, mapped[1:]):
+        for mark_column, mark_row in _bresenham(column, row, next_column, next_row):
+            grid[mark_row][mark_column] = "·"
+    for column, row in mapped:
+        grid[row][column] = "●"
+    body = "\n".join("".join(line) for line in grid)
+    caption = f"{ymin:g} … {ymax:g}  ×  {xmin:g} … {xmax:g}"
+    return Text(f"{title}\n{body}\n{caption}")
+
+
+def _bresenham(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
+    points: list[tuple[int, int]] = []
+    dx = abs(x1 - x0)
+    dy = -abs(y1 - y0)
+    step_x = 1 if x0 < x1 else -1
+    step_y = 1 if y0 < y1 else -1
+    error = dx + dy
+    x, y = x0, y0
+    while True:
+        points.append((x, y))
+        if x == x1 and y == y1:
+            return points
+        doubled = 2 * error
+        if doubled >= dy:
+            error += dy
+            x += step_x
+        if doubled <= dx:
+            error += dx
+            y += step_y
 
 
 def _bar_chart(block: BarChartBlock) -> Table:
@@ -313,6 +482,48 @@ def _bar_chart(block: BarChartBlock) -> Table:
         width = max(1, round(abs(item.value) / maximum * 24)) if item.value else 0
         table.add_row(item.label, "█" * width, item.display or f"{item.value:g}")
     return table
+
+
+def _workspace_form(form: FormDescription) -> Vertical:
+    children: list[Any] = [
+        Label(form.title, classes="view-title"),
+    ]
+    if form.description:
+        children.append(Static(form.description, classes="view-block"))
+    for field in form.fields:
+        widget_id = f"ws-{form.collection}-{field.name}"
+        if field.type == "boolean":
+            children.append(Checkbox(field.label, id=widget_id))
+        else:
+            children.append(Label(field.label + (" *" if field.required else "")))
+            children.append(
+                Input(
+                    value=field.default or "",
+                    placeholder=field.description or field.name,
+                    id=widget_id,
+                    classes="workspace-input",
+                )
+            )
+    children.append(Button("Record", id=f"ws-save-{form.collection}"))
+    return Vertical(*children, classes="workspace-form")
+
+
+def _read_workspace_form(app: PromptTUI, form: FormDescription) -> dict[str, Any]:
+    document: dict[str, Any] = {}
+    for field in form.fields:
+        widget_id = f"ws-{form.collection}-{field.name}"
+        if field.type == "boolean":
+            document[field.name] = app.query_one(f"#{widget_id}", Checkbox).value
+            continue
+        raw = app.query_one(f"#{widget_id}", Input).value.strip()
+        if not raw:
+            if field.required:
+                raise ValueError(f"{field.label} is required")
+            continue
+        document[field.name] = parse_field_value(field.type, raw)
+    if not document:
+        raise ValueError("record at least one field")
+    return document
 
 
 def _error_message(detail: str) -> Vertical:
@@ -349,5 +560,7 @@ def run_tui(root: Path, pack: AppPack, *, timezone: str, debug: bool = False) ->
             trace=trace,
             model=config.model,
             debug=debug,
+            root=root,
+            timezone=timezone,
         ).run()
     return 0

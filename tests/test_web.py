@@ -7,6 +7,7 @@ from typing import Any
 
 from prompt_os.app_pack import AppPack
 from prompt_os.cli import main
+from prompt_os.store import DocumentStore
 from prompt_os.web import PromptWeb, WebResponse
 
 
@@ -23,7 +24,7 @@ def _create_app(root: Path) -> AppPack:
                 "name": "Sample App",
                 "version": "1.2.3",
                 "functionality": "FUNCTIONALITY.md",
-                "capabilities": ["storage"],
+                "capabilities": ["documents"],
                 "data_policy": "persistent",
             }
         ),
@@ -107,6 +108,11 @@ def test_web_lists_apps_and_serves_the_operator_interface(tmp_path: Path) -> Non
     assert page.status == 200
     assert page.content_type.startswith("text/html")
     assert b"Prompt OS" in page.body
+    assert b"katex.min.js" in page.body
+    assert b"renderMath" in page.body
+    assert b"renderLineChart" in page.body
+    assert b"pendingChat" in page.body
+    assert b"nib-track" in page.body
     assert _json(detail)["functionality"].startswith("# Purpose")
 
 
@@ -241,6 +247,67 @@ def test_web_cli_starts_the_local_interface(
     assert called["port"] == 9000
     assert called["open_browser"] is True
     assert called["host"] == "127.0.0.1"
+
+
+def test_web_lists_stored_records_as_json(tmp_path: Path) -> None:
+    pack = _create_app(tmp_path)
+    web = PromptWeb(tmp_path)
+    empty = web.dispatch("GET", f"/api/apps/{pack.id}/records")
+
+    database = tmp_path / "var" / "prompt-os.sqlite"
+    database.parent.mkdir(parents=True, exist_ok=True)
+    store = DocumentStore(database, app_id=pack.id)
+    store.put("inbox", {"label": "alpha"}, document_id="record-1")
+    store.put("notes", {"label": "beta"}, document_id="record-2")
+    store.put("inbox", {"label": "alpha-2"}, document_id="record-1")
+    store.close()
+
+    listing = web.dispatch("GET", f"/api/apps/{pack.id}/records")
+    inbox = web.dispatch("GET", f"/api/apps/{pack.id}/records?collection=inbox")
+    detail = web.dispatch("GET", f"/api/apps/{pack.id}/records/record-1")
+    missing = web.dispatch("GET", f"/api/apps/{pack.id}/records/missing")
+
+    assert empty.status == 200
+    assert _json(empty)["records"] == []
+    assert _json(listing)["collections"] == {"inbox": 1, "notes": 1}
+    assert _json(listing)["total"] == 2
+    assert {item["id"] for item in _json(listing)["records"]} == {"record-1", "record-2"}
+    assert [item["id"] for item in _json(inbox)["records"]] == ["record-1"]
+    assert _json(inbox)["records"][0]["document"] == {"label": "alpha-2"}
+    assert _json(detail)["record"]["document"] == {"label": "alpha-2"}
+    assert [item["event"] for item in _json(detail)["history"]] == ["created", "updated"]
+    assert missing.status == 404
+    page = web.dispatch("GET", "/")
+    assert b'data-tab="records"' in page.body
+    assert b'data-tab="workspace"' in page.body
+    assert b"operate-toggle" in page.body
+
+
+def test_web_workspace_captures_without_a_conversation(tmp_path: Path) -> None:
+    pack = _create_app(tmp_path)
+    database = tmp_path / "var" / "prompt-os.sqlite"
+    database.parent.mkdir(parents=True, exist_ok=True)
+    store = DocumentStore(database, app_id=pack.id)
+    store.put("inbox", {"label": "alpha"}, document_id="record-1")
+    store.close()
+    web = PromptWeb(tmp_path)
+
+    surface = web.dispatch("GET", f"/api/apps/{pack.id}/workspace")
+    captured = web.dispatch(
+        "POST",
+        f"/api/apps/{pack.id}/workspace/capture",
+        body=json.dumps(
+            {"collection": "inbox", "document": {"label": "beta"}}
+        ).encode(),
+    )
+
+    payload = _json(surface)
+    assert surface.status == 200
+    assert payload["source"] == "observed"
+    assert payload["forms"][0]["collection"] == "inbox"
+    assert captured.status == 200
+    assert _json(captured)["record"]["document"] == {"label": "beta"}
+    assert len(_json(captured)["workspace"]["records"]) == 2
 
 
 def test_web_resets_a_conversation_session(tmp_path: Path) -> None:

@@ -21,6 +21,20 @@ The service keeps a lightweight record of commitments and helps the user underst
 - A destructive or bulk archive requires explicit confirmation.
 - Priority is not inferred merely from emotional wording.
 
+## Interface
+
+Capture:
+- description (required)
+- due date
+- priority
+- context
+- note
+- status
+
+Show:
+- records
+- open only
+
 ## Acceptance examples
 
 - “Call Alex tomorrow” creates one open task with tomorrow’s local date.

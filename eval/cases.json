@@ -3,6 +3,7 @@
   "cases": [
     {"id": "calculator-basic", "app": "calculator", "message": "What is 17% of 84?", "required_tools": ["math.evaluate"], "expected_state": {"documents": 0, "revisions": 0, "candidates": 0}},
     {"id": "calculator-conversion", "app": "calculator", "message": "Convert 3 miles to kilometres.", "required_tools": ["unit.convert"], "expected_state": {"documents": 0, "revisions": 0, "candidates": 0}},
+    {"id": "calculator-plot", "app": "calculator", "message": "Plot y = sin(x) from -pi to pi.", "required_tools": ["math.sample"], "expected_state": {"documents": 0, "revisions": 0, "candidates": 0}},
     {
       "id": "task-lifecycle",
       "app": "task-list",

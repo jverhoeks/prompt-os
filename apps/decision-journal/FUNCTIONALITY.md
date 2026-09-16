@@ -21,6 +21,17 @@ The service preserves important decisions, their context and later outcomes so t
 - Summaries cite the stored decisions on which they are based.
 - Sensitive entries are not shared or exported without explicit instruction.
 
+## Interface
+
+Capture:
+- note (required, text)
+- review date
+- rationale (optional, text)
+- context (optional, text)
+
+Show:
+- records
+
 ## Acceptance examples
 
 - “We chose SQLite because deployment is simpler” records the decision and stated rationale without inventing rejected options.

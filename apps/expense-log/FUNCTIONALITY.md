@@ -21,6 +21,23 @@ The service records personal expenses and provides transparent summaries by peri
 - Totals come from the aggregation service and keep currencies separate. If the aggregation service is unavailable, totals may be calculated directly from the applicable stored expenses using deterministic arithmetic.
 - Cross-currency totals require dated exchange rates and disclose their source.
 
+## Interface
+
+Capture:
+- amount (required, decimal)
+- currency (required)
+- date
+- merchant
+- description
+- classification
+- reimbursable (optional)
+
+Show:
+- records
+- total of amount
+- amount by classification
+- amount by currency
+
 ## Acceptance examples
 
 - “Lunch was €18.50” records exactly EUR 18.50 on the applicable date.

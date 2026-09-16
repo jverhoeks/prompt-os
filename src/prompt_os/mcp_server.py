@@ -154,6 +154,19 @@ def create_server(service: ToolService, *, log_level: LogLevel = "ERROR") -> Fas
         """Evaluate bounded arithmetic using deterministic decimal operations."""
         return service.calculate(expression)
 
+    @server.tool(name="math.sample")
+    def math_sample(
+        expression: str,
+        start: str,
+        end: str,
+        points: int = 240,
+        variable: str = "x",
+    ) -> dict[str, Any]:
+        """Sample a univariate expression over a closed interval for a continuous plot."""
+        return service.sample(
+            expression, start=start, end=end, points=points, variable=variable
+        )
+
     @server.tool(name="unit.convert")
     def unit_convert(
         value: str | int | float, from_unit: str, to_unit: str

@@ -15,6 +15,7 @@
     {"name": "contract.evidence", "block": "data-contract", "purpose": "List immutable evidence available to support a contract candidate.", "mutates": false},
     {"name": "contract.propose", "block": "data-contract", "purpose": "Submit an evidence-backed generated contract candidate.", "mutates": true},
     {"name": "math.evaluate", "block": "calculation", "purpose": "Evaluate bounded arithmetic deterministically.", "mutates": false},
+    {"name": "math.sample", "block": "calculation", "purpose": "Sample a univariate expression over a closed interval for a continuous plot.", "mutates": false},
     {"name": "unit.convert", "block": "conversion", "purpose": "Convert compatible measurements deterministically.", "mutates": false},
     {"name": "view.present", "block": "presentation", "purpose": "Return a generic structured view description for capable clients.", "mutates": false}
   ]

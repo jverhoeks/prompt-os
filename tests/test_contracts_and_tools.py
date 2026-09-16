@@ -222,6 +222,10 @@ def test_math_service_is_deterministic_and_bounded(tmp_path: Path) -> None:
         timezone="UTC",
     )
     assert service.calculate("84 * 0.17")["value"] == "14.28"
+    assert float(service.calculate("sin(0)")["value"]) == 0
+    sampled = service.sample("sin(x)", start="-pi", end="pi", points=5)
+    assert sampled["count"] == 5
+    assert sampled["points"][2]["y"] == pytest.approx(0, abs=1e-10)
     with pytest.raises(ValueError, match="unsupported"):
         service.calculate("__import__('os').getcwd()")
     service.close()

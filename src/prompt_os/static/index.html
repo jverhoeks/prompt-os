@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Sora:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
   <style>
     :root {
       --walnut: #16110d;
@@ -168,6 +170,8 @@
       background: var(--paper);
       color: var(--ink);
     }
+    .tabs button[data-operate="true"] { display: none; }
+    .tabs.show-operate button[data-operate="true"] { display: inline-flex; }
 
     .panel { display: none; flex: 1; min-height: 0; }
     .panel.active { display: flex; flex-direction: column; }
@@ -204,7 +208,72 @@
       border-radius: 1rem 0.2rem 1rem 1rem;
     }
     .message.error .bubble { background: #f6d6d1; }
+    .message.pending .bubble {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      min-height: 2.6rem;
+    }
+    .pending-copy { color: #7a6a55; font-size: 0.88rem; }
+    .nib-track {
+      position: relative;
+      width: 7.2rem;
+      height: 0.55rem;
+      border-radius: 999px;
+      background: rgba(28, 22, 16, 0.08);
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    .nib-track i {
+      position: absolute;
+      top: 0.1rem;
+      left: 0.12rem;
+      width: 1.55rem;
+      height: 0.35rem;
+      border-radius: 999px;
+      background: var(--copper);
+      animation: nib 1.15s ease-in-out infinite;
+    }
+    @keyframes nib {
+      0% { transform: translateX(0); opacity: 0.45; }
+      50% { transform: translateX(5.2rem); opacity: 1; }
+      100% { transform: translateX(0); opacity: 0.45; }
+    }
+    .composer.busy::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent 0%, var(--copper) 50%, transparent 100%);
+      background-size: 40% 100%;
+      background-repeat: no-repeat;
+      animation: shuttle 1.05s linear infinite;
+    }
+    @keyframes shuttle {
+      0% { background-position: -40% 0; }
+      100% { background-position: 140% 0; }
+    }
+    .status.busy::before {
+      content: "";
+      display: inline-block;
+      width: 0.55rem;
+      height: 0.55rem;
+      margin-right: 0.45rem;
+      border: 2px solid rgba(183, 167, 141, 0.35);
+      border-top-color: var(--copper-2);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: -0.08rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .nib-track i, .composer.busy::before, .status.busy::before { animation: none; }
+      .nib-track i { left: 2.6rem; opacity: 1; }
+    }
     .composer {
+      position: relative;
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 0.75rem;
@@ -292,8 +361,15 @@
     .bar { display: grid; grid-template-columns: 8rem 1fr 5rem; gap: 0.6rem; align-items: center; margin: 0.35rem 0; }
     .bar-track { height: 0.55rem; background: rgba(28, 22, 16, 0.1); }
     .bar-fill { display: block; height: 100%; background: var(--copper); }
+    .line-chart { width: 100%; height: auto; display: block; margin: 0.2rem 0 0.6rem; }
     .md p { margin: 0 0 0.6rem; }
     .md ul { margin: 0 0 0.6rem; padding-left: 1.1rem; }
+    .md .katex { font-size: 1.12em; color: var(--ink); }
+    .md .katex-display {
+      margin: 0.35rem 0 0.85rem;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
     .md code, .debug, .diff {
       font-family: "Fragment Mono", ui-monospace, monospace;
       font-size: 0.82rem;
@@ -383,6 +459,110 @@
     }
     .checks { list-style: none; padding: 0; margin: 0.6rem 0; }
     .checks li { margin: 0.25rem 0; font-family: "Fragment Mono", ui-monospace, monospace; font-size: 0.85rem; }
+    .records-layout {
+      display: grid;
+      grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+      gap: 1rem;
+      align-items: start;
+    }
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+      gap: 1.2rem;
+      align-items: start;
+    }
+    .app-form label.field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin: 0 0 0.85rem;
+      color: var(--type);
+    }
+    .app-form .field-name {
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--mute);
+    }
+    .app-form input, .app-form textarea, .app-form select {
+      width: 100%;
+      background: #0f0c0a;
+      color: var(--paper);
+      border: 1px solid var(--rule);
+      font: inherit;
+      padding: 0.55rem 0.65rem;
+      border-radius: 0.3rem;
+    }
+    .app-form textarea { min-height: 5rem; }
+    .app-form .check {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .app-form .hint { color: var(--mute); font-size: 0.78rem; }
+    .extra-fields { margin: 0.4rem 0 0.8rem; }
+    .extra-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 0.4rem;
+      margin-bottom: 0.4rem;
+    }
+    .work-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    .work-table th, .work-table td {
+      text-align: left;
+      padding: 0.45rem 0.5rem;
+      border-bottom: 1px solid var(--rule);
+      vertical-align: top;
+    }
+    .work-table button.link {
+      appearance: none;
+      background: none;
+      border: 0;
+      color: var(--copper-2);
+      font: inherit;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+    }
+    .work-table tr.selected td { background: rgba(208, 106, 43, 0.12); }
+    .work-table th { color: var(--mute); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; }
+    @media (max-width: 960px) {
+      .workspace-grid { grid-template-columns: 1fr; }
+    }
+    .record-btn {
+      width: 100%;
+      text-align: left;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+    }
+    .record-btn[aria-current="true"] { border-color: var(--copper); }
+    .record-btn code {
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 0.78rem;
+    }
+    .json-block {
+      white-space: pre-wrap;
+      background: #0f0c0a;
+      color: #f3ead8;
+      padding: 1rem;
+      overflow: auto;
+      line-height: 1.5;
+      font-family: "Fragment Mono", ui-monospace, monospace;
+      font-size: 0.82rem;
+    }
+    .history-item {
+      border-top: 1px solid var(--rule);
+      padding: 0.7rem 0 0;
+      margin-top: 0.7rem;
+    }
+    @media (max-width: 960px) {
+      .records-layout { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -408,11 +588,14 @@
         </div>
       </header>
       <nav class="tabs" id="tabs" hidden>
-        <button data-tab="talk" aria-selected="true">Talk</button>
-        <button data-tab="functionality">Functionality</button>
-        <button data-tab="improve">Improve</button>
-        <button data-tab="contract">Contract</button>
-        <button data-tab="evaluate">Evaluate</button>
+        <button data-tab="workspace">App</button>
+        <button data-tab="talk">Talk</button>
+        <button data-tab="records" data-operate="true">Records</button>
+        <button data-tab="functionality" data-operate="true">Functionality</button>
+        <button data-tab="improve" data-operate="true">Improve</button>
+        <button data-tab="contract" data-operate="true">Contract</button>
+        <button data-tab="evaluate" data-operate="true">Evaluate</button>
+        <button type="button" id="operate-toggle" class="ghost" style="margin-left:auto">Operate</button>
       </nav>
       <section class="panel active" id="panel-empty">
         <div class="empty">
@@ -430,6 +613,46 @@
           <textarea id="prompt" placeholder="Write a request and press Enter" rows="2"></textarea>
           <button class="action" id="send" type="submit">Send</button>
         </form>
+      </section>
+      <section class="panel" id="panel-workspace">
+        <div class="ledger">
+          <h2 id="workspace-heading">App</h2>
+          <p class="lede" id="workspace-lede">Capture and review records. This path does not use the conversation.</p>
+          <div class="row">
+            <span class="pill" id="workspace-source"></span>
+            <div id="workspace-collections" class="row" style="margin:0"></div>
+            <label id="workspace-open-wrap" hidden><input id="workspace-open-only" type="checkbox"> Open only</label>
+            <input id="workspace-search" type="text" placeholder="Filter records" style="width:12rem;background:transparent;border:0;border-bottom:1px solid var(--rule);color:var(--type);font:inherit;">
+            <button class="ghost" id="refresh-workspace" type="button">Refresh</button>
+            <button class="ghost" id="workspace-clear" type="button">New record</button>
+          </div>
+          <div class="workspace-grid">
+            <div id="workspace-forms"></div>
+            <div>
+              <div id="workspace-view"></div>
+              <div id="workspace-records"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" id="panel-records">
+        <div class="ledger">
+          <h2>Stored records</h2>
+          <p class="lede">Schema-neutral JSON documents for this application, grouped by collection. This is the current projection; each document still has an append-only revision history.</p>
+          <div class="row">
+            <label>Collection
+              <select id="record-collection">
+                <option value="">all</option>
+              </select>
+            </label>
+            <button class="ghost" id="refresh-records" type="button">Refresh</button>
+          </div>
+          <p class="lede" id="records-summary"></p>
+          <div class="records-layout">
+            <div id="records-list"></div>
+            <div id="records-detail"></div>
+          </div>
+        </div>
       </section>
       <section class="panel" id="panel-functionality">
         <div class="ledger">
@@ -487,8 +710,14 @@
       tab: "talk",
       messages: [],
       busy: false,
+      pendingChat: false,
       contract: null,
       improvement: null,
+      records: null,
+      selectedRecord: null,
+      workspace: null,
+      editingId: null,
+      workspaceCollection: null,
     };
 
     const els = {
@@ -511,9 +740,25 @@
       promoteContract: document.getElementById("promote-contract"),
       banner: document.getElementById("runtime-banner"),
       traceLimit: document.getElementById("trace-limit"),
+      recordCollection: document.getElementById("record-collection"),
+      recordsList: document.getElementById("records-list"),
+      recordsDetail: document.getElementById("records-detail"),
+      recordsSummary: document.getElementById("records-summary"),
+      workspaceLede: document.getElementById("workspace-lede"),
+      workspaceSource: document.getElementById("workspace-source"),
+      workspaceForms: document.getElementById("workspace-forms"),
+      workspaceView: document.getElementById("workspace-view"),
+      workspaceRecords: document.getElementById("workspace-records"),
+      workspaceCollections: document.getElementById("workspace-collections"),
+      workspaceSearch: document.getElementById("workspace-search"),
+      workspaceOpen: document.getElementById("workspace-open-only"),
+      workspaceOpenWrap: document.getElementById("workspace-open-wrap"),
     };
 
     els.timezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    els.timezone.addEventListener("change", () => {
+      if (state.tab === "workspace") loadWorkspace();
+    });
 
     document.getElementById("composer").addEventListener("submit", (event) => {
       event.preventDefault();
@@ -534,6 +779,18 @@
     document.getElementById("review-contract").addEventListener("click", reviewContract);
     document.getElementById("promote-contract").addEventListener("click", promoteContract);
     document.getElementById("run-eval").addEventListener("click", runEvaluation);
+    document.getElementById("refresh-records").addEventListener("click", () => loadRecords());
+    document.getElementById("refresh-workspace").addEventListener("click", () => loadWorkspace());
+    document.getElementById("workspace-clear").addEventListener("click", () => {
+      state.editingId = null;
+      renderWorkspace();
+    });
+    document.getElementById("workspace-search").addEventListener("input", () => renderWorkspace());
+    document.getElementById("workspace-open-only").addEventListener("change", () => renderWorkspace());
+    document.getElementById("operate-toggle").addEventListener("click", () => {
+      document.getElementById("tabs").classList.toggle("show-operate");
+    });
+    els.recordCollection.addEventListener("change", () => loadRecords());
     els.tabs.addEventListener("click", (event) => {
       const button = event.target.closest("button[data-tab]");
       if (button) setTab(button.dataset.tab);
@@ -565,6 +822,9 @@
       document.getElementById("propose-improve").disabled = busy;
       document.getElementById("review-contract").disabled = busy;
       document.getElementById("run-eval").disabled = busy;
+      document.getElementById("composer").classList.toggle("busy", busy);
+      els.status.classList.toggle("busy", busy);
+      els.send.textContent = state.pendingChat && busy ? "Working" : "Send";
       setStatus(busy ? (label || "Working…") : "Ready");
     }
 
@@ -581,42 +841,144 @@
         .replace(/\*([^*]+)\*/g, "<em>$1</em>");
     }
 
-    function renderMarkdown(source) {
-      const escaped = escapeHtml(source || "").replace(/\r\n/g, "\n");
-      const chunks = escaped.split(/```(?:[a-z0-9_-]*)\n?/i);
+    function renderMath(item) {
+      if (window.katex) {
+        return window.katex.renderToString(item.body, {
+          displayMode: item.display,
+          throwOnError: false,
+          output: "html",
+        });
+      }
+      const open = item.display ? "\\[" : "\\(";
+      const close = item.display ? "\\]" : "\\)";
+      return `<code>${escapeHtml(open + item.body + close)}</code>`;
+    }
+
+    function renderMarkdownBlocks(escaped) {
+      const lines = escaped.split("\n");
       let html = "";
-      for (let i = 0; i < chunks.length; i += 1) {
-        if (i % 2 === 1) {
-          html += `<pre><code>${chunks[i].replace(/\n$/, "")}</code></pre>`;
+      let list = [];
+      const flush = () => {
+        if (list.length) {
+          html += `<ul>${list.join("")}</ul>`;
+          list = [];
+        }
+      };
+      for (const line of lines) {
+        const heading = /^(#{1,4}) (.+)$/.exec(line);
+        if (heading) {
+          flush();
+          html += `<h${heading[1].length}>${inlineMarkdown(heading[2])}</h${heading[1].length}>`;
           continue;
         }
-        const lines = chunks[i].split("\n");
-        let list = [];
-        const flush = () => {
-          if (list.length) {
-            html += `<ul>${list.join("")}</ul>`;
-            list = [];
-          }
-        };
-        for (const line of lines) {
-          const heading = /^(#{1,4}) (.+)$/.exec(line);
-          if (heading) {
-            flush();
-            html += `<h${heading[1].length}>${inlineMarkdown(heading[2])}</h${heading[1].length}>`;
-            continue;
-          }
-          const item = /^[-*] (.+)$/.exec(line);
-          if (item) {
-            list.push(`<li>${inlineMarkdown(item[1])}</li>`);
-            continue;
-          }
-          if (!line.trim()) { flush(); continue; }
-          flush();
-          html += `<p>${inlineMarkdown(line)}</p>`;
+        const item = /^[-*] (.+)$/.exec(line);
+        if (item) {
+          list.push(`<li>${inlineMarkdown(item[1])}</li>`);
+          continue;
         }
+        if (!line.trim()) { flush(); continue; }
         flush();
+        html += `<p>${inlineMarkdown(line)}</p>`;
       }
+      flush();
+      return html;
+    }
+
+    function renderMarkdown(source) {
+      const fences = [];
+      const maths = [];
+      let text = String(source || "").replace(/\r\n/g, "\n");
+      text = text.replace(/```(?:[a-z0-9_-]*)\n?([\s\S]*?)```/gi, (_, body) => {
+        fences.push(body.replace(/\n$/, ""));
+        return `\n%%FENCE${fences.length - 1}%%\n`;
+      });
+      text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, body) => {
+        maths.push({ display: true, body: body.trim() });
+        return `%%MATH${maths.length - 1}%%`;
+      });
+      text = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, body) => {
+        maths.push({ display: true, body: body.trim() });
+        return `%%MATH${maths.length - 1}%%`;
+      });
+      text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, body) => {
+        maths.push({ display: false, body: body.trim() });
+        return `%%MATH${maths.length - 1}%%`;
+      });
+      text = text.replace(/(^|[^\\$])\$([^$\n]+?)\$/g, (match, prefix, body) => {
+        maths.push({ display: false, body: body.trim() });
+        return `${prefix}%%MATH${maths.length - 1}%%`;
+      });
+      let html = renderMarkdownBlocks(escapeHtml(text));
+      html = html.replace(/<p>%%FENCE(\d+)%%<\/p>/g, (_, index) => (
+        `<pre><code>${escapeHtml(fences[Number(index)])}</code></pre>`
+      ));
+      html = html.replace(/%%FENCE(\d+)%%/g, (_, index) => (
+        `<pre><code>${escapeHtml(fences[Number(index)])}</code></pre>`
+      ));
+      html = html.replace(/<p>%%MATH(\d+)%%<\/p>/g, (_, index) => renderMath(maths[Number(index)]));
+      html = html.replace(/%%MATH(\d+)%%/g, (_, index) => renderMath(maths[Number(index)]));
       return `<div class="md">${html}</div>`;
+    }
+
+    function formatTick(value) {
+      if (!Number.isFinite(value)) return "";
+      const abs = Math.abs(value);
+      if (abs !== 0 && (abs >= 1000 || abs < 0.001)) return value.toExponential(2);
+      return String(Number(value.toPrecision(6)));
+    }
+
+    function renderLineChart(block) {
+      const finite = (block.series || []).filter((item) => Number.isFinite(item.x) && Number.isFinite(item.y));
+      if (finite.length < 2) {
+        return `${block.title ? `<h4>${escapeHtml(block.title)}</h4>` : ""}<p class="lede">Not enough finite samples to plot.</p>`;
+      }
+      const width = 640;
+      const height = 280;
+      const pad = { left: 52, right: 18, top: 18, bottom: 38 };
+      const xs = finite.map((item) => item.x);
+      const ys = finite.map((item) => item.y);
+      let xmin = Math.min(...xs);
+      let xmax = Math.max(...xs);
+      let ymin = Math.min(...ys);
+      let ymax = Math.max(...ys);
+      if (xmin === xmax) { xmin -= 1; xmax += 1; }
+      if (ymin === ymax) { ymin -= 1; ymax += 1; }
+      const innerW = width - pad.left - pad.right;
+      const innerH = height - pad.top - pad.bottom;
+      const sx = (x) => pad.left + ((x - xmin) / (xmax - xmin)) * innerW;
+      const sy = (y) => pad.top + ((ymax - y) / (ymax - ymin)) * innerH;
+      const chunks = [];
+      let current = [];
+      for (const item of block.series || []) {
+        if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) {
+          if (current.length) { chunks.push(current); current = []; }
+          continue;
+        }
+        current.push(item);
+      }
+      if (current.length) chunks.push(current);
+      const polylines = chunks.filter((chunk) => chunk.length >= 2).map((chunk) => {
+        const points = chunk.map((item) => `${sx(item.x).toFixed(2)},${sy(item.y).toFixed(2)}`).join(" ");
+        return `<polyline fill="none" stroke="#d06a2b" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" points="${points}"></polyline>`;
+      }).join("");
+      let axes = `<rect x="${pad.left}" y="${pad.top}" width="${innerW}" height="${innerH}" fill="none" stroke="rgba(28,22,16,0.16)"></rect>`;
+      if (xmin <= 0 && xmax >= 0) {
+        axes += `<line x1="${sx(0).toFixed(2)}" y1="${pad.top}" x2="${sx(0).toFixed(2)}" y2="${height - pad.bottom}" stroke="rgba(28,22,16,0.28)"></line>`;
+      }
+      if (ymin <= 0 && ymax >= 0) {
+        axes += `<line x1="${pad.left}" y1="${sy(0).toFixed(2)}" x2="${width - pad.right}" y2="${sy(0).toFixed(2)}" stroke="rgba(28,22,16,0.28)"></line>`;
+      }
+      const labels = [
+        `<text x="${pad.left}" y="${height - 12}" font-size="11" fill="#7a6a55">${escapeHtml(formatTick(xmin))}</text>`,
+        `<text x="${width - pad.right}" y="${height - 12}" font-size="11" fill="#7a6a55" text-anchor="end">${escapeHtml(formatTick(xmax))}</text>`,
+        `<text x="8" y="${pad.top + 10}" font-size="11" fill="#7a6a55">${escapeHtml(formatTick(ymax))}</text>`,
+        `<text x="8" y="${height - pad.bottom}" font-size="11" fill="#7a6a55">${escapeHtml(formatTick(ymin))}</text>`,
+      ].join("");
+      const axisNames = [
+        block.x_label ? `<text x="${width / 2}" y="${height - 2}" font-size="11" fill="#7a6a55" text-anchor="middle">${escapeHtml(block.x_label)}</text>` : "",
+        block.y_label ? `<text x="14" y="${pad.top + innerH / 2}" font-size="11" fill="#7a6a55" text-anchor="middle" transform="rotate(-90 14 ${pad.top + innerH / 2})">${escapeHtml(block.y_label)}</text>` : "",
+      ].join("");
+      return `${block.title ? `<h4>${escapeHtml(block.title)}</h4>` : ""}<svg class="line-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(block.title || "line chart")}">${axes}${polylines}${labels}${axisNames}</svg>`;
     }
 
     function renderView(view) {
@@ -644,6 +1006,7 @@
           }).join("");
           return `${block.title ? `<h4>${escapeHtml(block.title)}</h4>` : ""}${rows}`;
         }
+        if (block.type === "line-chart") return renderLineChart(block);
         return "";
       }).join("");
       return `<section class="view">${view.title ? `<h3>${escapeHtml(view.title)}</h3>` : ""}${blocks}</section>`;
@@ -662,7 +1025,7 @@
     }
 
     function renderConversation() {
-      els.conversation.innerHTML = state.messages.map((item) => {
+      let html = state.messages.map((item) => {
         if (item.role === "error") {
           return `<article class="message error"><div class="who">Error</div><div class="bubble">${escapeHtml(item.text)}</div></article>`;
         }
@@ -672,6 +1035,16 @@
         const tools = item.tool_calls ? `<pre class="debug">${escapeHtml(JSON.stringify(item.tool_calls, null, 2))}</pre>` : "";
         return `<article class="message assistant"><div class="who">App</div><div class="bubble">${renderView(item.view)}${renderMarkdown(item.text)}${tools}</div></article>`;
       }).join("");
+      if (state.pendingChat) {
+        html += `<article class="message pending" aria-live="polite" aria-label="Working on the request">
+          <div class="who">App</div>
+          <div class="bubble">
+            <span class="nib-track" aria-hidden="true"><i></i></span>
+            <span class="pending-copy">Working the request</span>
+          </div>
+        </article>`;
+      }
+      els.conversation.innerHTML = html;
       els.conversation.scrollTop = els.conversation.scrollHeight;
     }
 
@@ -701,25 +1074,270 @@
         button.setAttribute("aria-selected", button.dataset.tab === tab ? "true" : "false");
       });
       showPanel(tab);
+      if (tab === "records") loadRecords();
+      if (tab === "workspace") loadWorkspace();
     }
 
     async function selectApp(appId) {
       state.selected = appId;
       state.messages = [];
+      state.pendingChat = false;
       state.improvement = null;
       state.contract = null;
+      state.records = null;
+      state.selectedRecord = null;
+      state.workspace = null;
+      state.editingId = null;
+      state.workspaceCollection = null;
+      if (els.workspaceOpen) delete els.workspaceOpen.dataset.ready;
       renderApps();
       renderConversation();
       els.improveDetail.innerHTML = "";
       els.evalDetail.innerHTML = "";
+      els.recordsList.innerHTML = "";
+      els.recordsDetail.innerHTML = "";
+      els.recordsSummary.textContent = "";
+      els.workspaceForms.innerHTML = "";
+      els.workspaceView.innerHTML = "";
+      els.workspaceRecords.innerHTML = "";
       const detail = await api("GET", `/api/apps/${encodeURIComponent(appId)}`);
       state.detail = detail;
       els.name.textContent = detail.name;
       els.meta.textContent = `${detail.id} · ${detail.version} · ${detail.trace_mode} traces`;
       els.functionality.textContent = detail.functionality;
       renderImproveList(detail.improvements || []);
-      setTab(state.tab === "talk" ? "talk" : state.tab);
+      const usesDocuments = (detail.capabilities || []).includes("documents");
+      setTab(usesDocuments ? "workspace" : "talk");
       setStatus("Ready");
+    }
+
+    function fieldInput(field, value) {
+      const required = field.required ? "required" : "";
+      const hint = field.description ? `<span class="hint">${escapeHtml(field.description)}</span>` : "";
+      const mark = field.required ? " *" : "";
+      if (field.type === "boolean") {
+        const checked = value === true ? "checked" : "";
+        return `<label class="field check"><input type="checkbox" name="${escapeHtml(field.name)}" ${checked}> <span>${escapeHtml(field.label)}</span></label>${hint}`;
+      }
+      if (field.options && field.options.length) {
+        const current = value == null || value === "" ? (field.default || "") : String(value);
+        const opts = [`<option value=""></option>`].concat(field.options.map((item) => {
+          const selected = item === current ? "selected" : "";
+          return `<option ${selected}>${escapeHtml(item)}</option>`;
+        }));
+        if (current && !field.options.includes(current)) {
+          opts.push(`<option selected>${escapeHtml(current)}</option>`);
+        }
+        return `<label class="field"><span class="field-name">${escapeHtml(field.label)}${mark}</span><select name="${escapeHtml(field.name)}" ${required}>${opts.join("")}</select>${hint}</label>`;
+      }
+      if (field.type === "text" || field.type === "list") {
+        const text = value == null ? "" : (Array.isArray(value) ? JSON.stringify(value) : String(value));
+        return `<label class="field"><span class="field-name">${escapeHtml(field.label)}${mark}</span><textarea name="${escapeHtml(field.name)}" ${required}>${escapeHtml(text)}</textarea>${hint}</label>`;
+      }
+      let inputType = "text";
+      let step = "";
+      if (field.type === "integer") { inputType = "number"; step = "step=\"1\""; }
+      else if (field.type === "number" || field.type === "decimal") { inputType = "number"; step = "step=\"any\""; }
+      else if (field.type === "datetime") { inputType = String(value || "").includes("T") ? "datetime-local" : "date"; }
+      const shown = value == null || value === "" ? (field.default || "") : String(value);
+      return `<label class="field"><span class="field-name">${escapeHtml(field.label)}${mark}</span><input name="${escapeHtml(field.name)}" type="${inputType}" ${step} value="${escapeHtml(shown)}" ${required}>${hint}</label>`;
+    }
+
+    function recordIsOpen(item) {
+      const doc = item.document || {};
+      if (doc.completed === true) return false;
+      const status = String(doc.status || "").trim().toLowerCase();
+      if (!status) return true;
+      return !["done", "complete", "completed", "closed", "archived", "cancelled", "canceled"].includes(status);
+    }
+
+    function currentEditDocument() {
+      if (!state.editingId || !state.workspace) return {};
+      const record = (state.workspace.records || []).find((item) => item.id === state.editingId);
+      return record && record.document ? record.document : {};
+    }
+
+    function activeWorkspaceForm() {
+      const forms = state.workspace && state.workspace.forms ? state.workspace.forms : [];
+      if (!forms.length) return null;
+      return forms.find((item) => item.collection === state.workspaceCollection) || forms[0];
+    }
+
+    function renderWorkspace() {
+      const surface = state.workspace;
+      if (!surface) return;
+      els.workspaceSource.textContent = surface.source;
+      const heading = document.getElementById("workspace-heading");
+      if (heading) heading.textContent = surface.title || "App";
+      if (surface.summary) els.workspaceLede.textContent = surface.summary;
+      const metrics = surface.view ? {
+        ...surface.view,
+        blocks: (surface.view.blocks || []).filter((block) => block.type !== "table"),
+      } : null;
+      els.workspaceView.innerHTML = metrics && metrics.blocks && metrics.blocks.length ? renderView(metrics) : "";
+      const forms = surface.forms || [];
+      els.workspaceCollections.innerHTML = forms.length > 1
+        ? forms.map((form) => `<button class="ghost" type="button" data-collection="${escapeHtml(form.collection)}" ${form.collection === (state.workspaceCollection || forms[0].collection) ? "aria-current='true'" : ""}>${escapeHtml(form.title)}</button>`).join("")
+        : "";
+      const form = activeWorkspaceForm();
+      const values = currentEditDocument();
+      if (!form) {
+        els.workspaceForms.innerHTML = "<p class='lede'>No capture form for this application.</p>";
+      } else {
+        const extras = form.mode === "open" ? `
+          <div class="extra-fields">
+            <button class="ghost" type="button" data-add-field="${escapeHtml(form.collection)}">Add field</button>
+          </div>` : "";
+        const archive = state.editingId ? `<button class="ghost" type="button" id="workspace-archive">Archive</button>` : "";
+        els.workspaceForms.innerHTML = `<form class="card app-form" data-collection="${escapeHtml(form.collection)}">
+          <h3 style="font-family:Fraunces,serif;margin:0 0 .4rem">${escapeHtml(form.title)}</h3>
+          <p class="lede">${escapeHtml(form.description || "")}</p>
+          ${state.editingId ? `<p class="hint">Updating ${escapeHtml((surface.records || []).find((item) => item.id === state.editingId)?.title || state.editingId)}</p>` : ""}
+          ${(form.fields || []).map((field) => fieldInput(field, values[field.name])).join("")}
+          ${extras}
+          <div class="row">
+            <button class="action" type="submit">${state.editingId ? "Update record" : "Record"}</button>
+            ${archive}
+          </div>
+        </form>`;
+      }
+      const query = (els.workspaceSearch.value || "").trim().toLowerCase();
+      const collection = form ? form.collection : null;
+      const openPref = Boolean(surface.filters && surface.filters.open_only);
+      if (els.workspaceOpenWrap) {
+        els.workspaceOpenWrap.hidden = !openPref;
+        if (openPref && els.workspaceOpen && !els.workspaceOpen.dataset.ready) {
+          els.workspaceOpen.checked = true;
+          els.workspaceOpen.dataset.ready = "1";
+        }
+      }
+      const hideClosed = openPref && els.workspaceOpen && els.workspaceOpen.checked;
+      const rows = (surface.records || []).filter((item) => {
+        if (collection && item.collection !== collection) return false;
+        if (hideClosed && !recordIsOpen(item)) return false;
+        if (!query) return true;
+        const hay = `${item.title || ""} ${item.id} ${JSON.stringify(item.document || {})}`.toLowerCase();
+        return hay.includes(query);
+      });
+      const columns = (form && form.fields ? form.fields.map((field) => field.name).slice(0, 6) : ["title"]);
+      const head = ["", ...columns].map((name) => `<th>${escapeHtml(name || "record")}</th>`).join("");
+      const body = rows.map((item) => {
+        const selected = item.id === state.editingId ? "selected" : "";
+        const cells = columns.map((name) => `<td>${escapeHtml(item.document && item.document[name] != null ? String(item.document[name]) : "")}</td>`).join("");
+        return `<tr class="${selected}"><td><button class="link" type="button" data-edit="${escapeHtml(item.id)}">${escapeHtml(item.title || item.id)}</button></td>${cells}</tr>`;
+      }).join("") || `<tr><td colspan="${columns.length + 1}">No records yet.</td></tr>`;
+      els.workspaceRecords.innerHTML = `<table class="work-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+      els.workspaceForms.querySelectorAll("form.app-form").forEach((node) => {
+        node.addEventListener("submit", submitWorkspaceForm);
+      });
+      els.workspaceForms.querySelectorAll("[data-add-field]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const wrap = button.parentElement;
+          const row = document.createElement("div");
+          row.className = "extra-row";
+          row.innerHTML = `<input class="extra-name" placeholder="field"><input class="extra-value" placeholder="value"><button class="ghost" type="button">×</button>`;
+          row.lastElementChild.addEventListener("click", () => row.remove());
+          wrap.insertBefore(row, button);
+        });
+      });
+      const archiveBtn = document.getElementById("workspace-archive");
+      if (archiveBtn) archiveBtn.addEventListener("click", archiveWorkspaceRecord);
+      els.workspaceRecords.querySelectorAll("[data-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.editingId = button.dataset.edit;
+          renderWorkspace();
+        });
+      });
+      els.workspaceCollections.querySelectorAll("[data-collection]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.workspaceCollection = button.dataset.collection;
+          state.editingId = null;
+          renderWorkspace();
+        });
+      });
+    }
+
+    async function loadWorkspace() {
+      if (!state.selected) return;
+      try {
+        const timezone = encodeURIComponent((els.timezone.value || "UTC").trim() || "UTC");
+        state.workspace = await api("GET", `/api/apps/${encodeURIComponent(state.selected)}/workspace?timezone=${timezone}`);
+        renderWorkspace();
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    function readFormDocument(formEl, form) {
+      const data = new FormData(formEl);
+      const document = {};
+      for (const field of form.fields || []) {
+        if (field.type === "boolean") {
+          document[field.name] = formEl.querySelector(`[name="${field.name}"]`)?.checked === true;
+          continue;
+        }
+        const raw = data.get(field.name);
+        if (raw == null || String(raw).trim() === "") {
+          if (field.required) throw new Error(`${field.label} is required`);
+          continue;
+        }
+        if (field.type === "integer") document[field.name] = Number.parseInt(String(raw), 10);
+        else if (field.type === "number") document[field.name] = Number(raw);
+        else if (field.type === "list") {
+          const text = String(raw).trim();
+          document[field.name] = text.startsWith("[") ? JSON.parse(text) : text.split(",").map((part) => part.trim()).filter(Boolean);
+        } else document[field.name] = String(raw);
+      }
+      formEl.querySelectorAll(".extra-row").forEach((row) => {
+        const name = row.querySelector(".extra-name")?.value.trim();
+        const value = row.querySelector(".extra-value")?.value.trim();
+        if (name && value) document[name] = value;
+      });
+      if (!Object.keys(document).length) throw new Error("record at least one field");
+      return document;
+    }
+
+    async function archiveWorkspaceRecord() {
+      if (!state.selected || !state.editingId) return;
+      if (!window.confirm("Archive this record? It remains in history.")) return;
+      try {
+        const result = await api("POST", `/api/apps/${encodeURIComponent(state.selected)}/workspace/archive`, {
+          document_id: state.editingId,
+        });
+        state.workspace = result.workspace;
+        state.editingId = null;
+        renderWorkspace();
+        setStatus("Archived");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    async function submitWorkspaceForm(event) {
+      event.preventDefault();
+      if (!state.selected || !state.workspace) return;
+      const formEl = event.target;
+      const collection = formEl.dataset.collection;
+      const form = (state.workspace.forms || []).find((item) => item.collection === collection);
+      if (!form) return;
+      try {
+        const document = {
+          ...(form.defaults || {}),
+          ...readFormDocument(formEl, form),
+        };
+        const result = await api("POST", `/api/apps/${encodeURIComponent(state.selected)}/workspace/capture`, {
+          collection,
+          document,
+          document_id: state.editingId,
+          timezone: (els.timezone.value || "UTC").trim() || "UTC",
+        });
+        state.workspace = result.workspace;
+        state.editingId = null;
+        renderWorkspace();
+        setStatus("Recorded");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
     }
 
     async function sendMessage() {
@@ -727,6 +1345,7 @@
       if (!message || !state.selected || state.busy) return;
       els.prompt.value = "";
       state.messages.push({ role: "user", text: message });
+      state.pendingChat = true;
       renderConversation();
       setBusy(true, "Working…");
       try {
@@ -745,9 +1364,105 @@
         state.messages.push({ role: "error", text: error.message });
         setStatus(error.message, true);
       } finally {
+        state.pendingChat = false;
         renderConversation();
         setBusy(false);
         els.prompt.focus();
+      }
+    }
+
+    function prettyJson(value) {
+      return JSON.stringify(value, null, 2);
+    }
+
+    function renderRecords() {
+      const payload = state.records;
+      if (!payload) return;
+      const selected = els.recordCollection.value;
+      const collections = Object.entries(payload.collections || {});
+      els.recordCollection.innerHTML = `<option value="">all</option>` + collections.map(
+        ([name, count]) => `<option value="${escapeHtml(name)}" ${name === selected ? "selected" : ""}>${escapeHtml(name)} (${count})</option>`
+      ).join("");
+      if (selected && ![...els.recordCollection.options].some((option) => option.value === selected)) {
+        els.recordCollection.value = "";
+      }
+      const total = payload.total || 0;
+      const shown = payload.shown || 0;
+      els.recordsSummary.textContent = total
+        ? `Showing ${shown} of ${total} current documents.`
+        : "No stored documents yet. Talk to the application first.";
+      const records = payload.records || [];
+      els.recordsList.innerHTML = records.map((item) => `
+        <button class="card record-btn" type="button" data-id="${escapeHtml(item.id)}" aria-current="${state.selectedRecord === item.id}">
+          <span class="pill">${escapeHtml(item.collection)}</span>
+          <div><code>${escapeHtml(item.id)}</code></div>
+          <small class="lede">rev ${escapeHtml(String(item.revision))} · ${escapeHtml(item.updated_at || "")}</small>
+        </button>
+      `).join("") || "<p class='lede'>Nothing in this collection.</p>";
+      els.recordsList.querySelectorAll("[data-id]").forEach((button) => {
+        button.addEventListener("click", () => loadRecord(button.dataset.id));
+      });
+    }
+
+    function renderRecordDetail(payload) {
+      const record = payload.record;
+      const history = payload.history || [];
+      const historyHtml = history.slice().reverse().map((item) => `
+        <div class="history-item">
+          <div class="row">
+            <span class="pill">${escapeHtml(item.event)}</span>
+            <span class="pill">rev ${escapeHtml(String(item.revision))}</span>
+            <span class="lede">${escapeHtml(item.recorded_at || "")}</span>
+          </div>
+          <pre class="json-block">${escapeHtml(prettyJson(item.document))}</pre>
+        </div>
+      `).join("");
+      els.recordsDetail.innerHTML = `
+        <div class="card">
+          <div class="row">
+            <span class="pill">${escapeHtml(record.collection)}</span>
+            <span class="pill">rev ${escapeHtml(String(record.revision))}</span>
+            ${record.archived_at ? `<span class="pill bad">archived</span>` : ""}
+          </div>
+          <p><code>${escapeHtml(record.id)}</code></p>
+          <pre class="json-block">${escapeHtml(prettyJson(record.document))}</pre>
+          <h3 style="font-family:Fraunces,serif;margin:1rem 0 .4rem">Revision history</h3>
+          ${historyHtml || "<p class='lede'>No revisions.</p>"}
+        </div>
+      `;
+    }
+
+    async function loadRecords() {
+      if (!state.selected) return;
+      const collection = els.recordCollection.value;
+      const query = collection ? `?collection=${encodeURIComponent(collection)}` : "";
+      try {
+        setStatus("Loading records…");
+        const payload = await api("GET", `/api/apps/${encodeURIComponent(state.selected)}/records${query}`);
+        state.records = payload;
+        renderRecords();
+        if (state.selectedRecord && !(payload.records || []).some((item) => item.id === state.selectedRecord)) {
+          state.selectedRecord = null;
+          els.recordsDetail.innerHTML = "";
+        }
+        setStatus("Ready");
+      } catch (error) {
+        setStatus(error.message, true);
+      }
+    }
+
+    async function loadRecord(documentId) {
+      if (!state.selected) return;
+      state.selectedRecord = documentId;
+      renderRecords();
+      try {
+        const payload = await api(
+          "GET",
+          `/api/apps/${encodeURIComponent(state.selected)}/records/${encodeURIComponent(documentId)}`
+        );
+        renderRecordDetail(payload);
+      } catch (error) {
+        setStatus(error.message, true);
       }
     }
 

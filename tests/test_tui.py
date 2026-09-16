@@ -4,9 +4,10 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from textual.widgets import DataTable, Input, Markdown
+from textual.widgets import Button, DataTable, Input, Markdown
 
 from prompt_os.app_pack import AppPack
+from prompt_os.store import DocumentStore
 from prompt_os.tui import PromptTUI
 
 
@@ -30,14 +31,14 @@ class _Trace:
         self.records.append(record)
 
 
-def _pack() -> AppPack:
+def _pack(*, capabilities: tuple[str, ...] = ()) -> AppPack:
     return AppPack(
         id="sample-app",
         name="Sample application",
         version="0.1.0",
-        capabilities=(),
+        capabilities=capabilities,
         data_policy="persistent",
-        functionality="Sample functionality",
+        functionality="## Purpose\n\nRecord things.\n",
         path=Path("sample-app"),
     )
 
@@ -67,7 +68,16 @@ def test_tui_edits_input_and_renders_generic_markdown() -> None:
                                         "type": "table",
                                         "columns": ["Item", "Value"],
                                         "rows": [["Answer", "4"]],
-                                    }
+                                    },
+                                    {
+                                        "type": "line-chart",
+                                        "title": "y = sin(x)",
+                                        "series": [
+                                            {"x": 0, "y": 0},
+                                            {"x": 1.57, "y": 1},
+                                            {"x": 3.14, "y": 0},
+                                        ],
+                                    },
                                 ],
                             }
                         },
@@ -143,5 +153,31 @@ def test_tui_surfaces_turn_errors_and_recovers_input() -> None:
             assert len(app.query(".error-message")) == 1
             assert prompt.disabled is False
             assert trace.records[0]["outcome"] == "error"
+
+    asyncio.run(scenario())
+
+
+def test_tui_workspace_renders_a_distilled_form(tmp_path: Path) -> None:
+    pack = _pack(capabilities=("documents",))
+    database = tmp_path / "var" / "prompt-os.sqlite"
+    database.parent.mkdir(parents=True)
+    store = DocumentStore(database, app_id=pack.id)
+    store.put("inbox", {"label": "alpha"})
+    store.close()
+
+    async def scenario() -> None:
+        app = PromptTUI(
+            pack=pack,
+            session=_Session({"reply": "ok", "tool_calls": []}),  # type: ignore[arg-type]
+            trace=_Trace(),  # type: ignore[arg-type]
+            model="model",
+            root=tmp_path,
+        )
+        async with app.run_test(size=(100, 36)) as pilot:
+            app.action_toggle_workspace()
+            await pilot.pause()
+            assert app._workspace_mode is True
+            assert len(app.query(".workspace-form")) == 1
+            assert len(app.query(Button)) >= 1
 
     asyncio.run(scenario())

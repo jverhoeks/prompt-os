@@ -21,11 +21,13 @@ An application pack describes the service from a business perspective. It does n
 - Important calculations and aggregates are performed by deterministic services.
 - Current documents are simple projections over an append-only generic revision history.
 - Proposed changes to an application pack are versioned, tested and explicitly promoted.
-- User interfaces consume generic view descriptions; they do not recreate business logic.
+- User interfaces consume generic view descriptions and distilled forms; they do not recreate business logic.
 
 ## Generic presentation
 
-Applications may describe a result using generic text, metric, list, table and bar-chart blocks. The runtime does not prescribe which blocks an application uses. The model selects the smallest useful view from the business functionality, the user request and deterministic tool results; clients decide how to render the same description.
+Applications may describe a result using generic text, metric, list, table, bar-chart and line-chart blocks. The runtime does not prescribe which blocks an application uses. The model selects the smallest useful view from the business functionality, the user request and deterministic tool results; clients decide how to render the same description. A line chart is drawn from sampled coordinates, not from a freehand sketch.
+
+Clients distill a workspace from an optional `## Interface` section in the business specification: what to capture and what to show, in ordinary language. Show lines may name a record list, a total, a grouping, a current balance, low stock, or open-only records. Types and choices can be filled in from stored records. If that section is absent, the workspace falls back to a promoted data contract, then to observed keys. Submitting a form writes storage directly. That workspace is not an application-specific screen.
 
 The view vocabulary contains no application fields, categories or workflows. A terminal client may render a table as a native grid while a browser client may render the same block as HTML. Plain textual replies remain available for clients that do not consume structured views.
 
@@ -79,7 +81,7 @@ The first shared tool server exposes:
 - Structure discovery: `store.describe`
 - Deterministic reporting: `store.aggregate`
 - Contract lifecycle: `contract.current`, `contract.evidence`, `contract.propose`
-- Calculation: `math.evaluate`
+- Calculation: `math.evaluate`, `math.sample`
 - Conversion: `unit.convert`
 - Presentation: `view.present`
 

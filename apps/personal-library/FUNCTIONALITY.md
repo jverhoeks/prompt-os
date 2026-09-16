@@ -21,6 +21,18 @@ The service keeps a personal record of books and reading, including interests, p
 - Suggestions explain which recorded preferences or constraints they satisfy.
 - Recommendations do not claim that an unread book has been enjoyed by the user.
 
+## Interface
+
+Capture:
+- title (required)
+- author
+- status
+- rating
+- notes (text)
+
+Show:
+- records
+
 ## Acceptance examples
 
 - “I started Dune” creates or updates one matching book as currently reading.

@@ -48,8 +48,21 @@ class BarChartBlock(BaseModel):
     series: list[BarDatum] = Field(min_length=1)
 
 
+class LineDatum(BaseModel):
+    x: float
+    y: float | None = None
+
+
+class LineChartBlock(BaseModel):
+    type: Literal["line-chart"]
+    title: str | None = None
+    x_label: str | None = None
+    y_label: str | None = None
+    series: list[LineDatum] = Field(min_length=2, max_length=2000)
+
+
 ViewBlock = Annotated[
-    TextBlock | MetricBlock | ListBlock | TableBlock | BarChartBlock,
+    TextBlock | MetricBlock | ListBlock | TableBlock | BarChartBlock | LineChartBlock,
     Field(discriminator="type"),
 ]
 

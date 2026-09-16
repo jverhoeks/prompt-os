@@ -29,8 +29,10 @@ from .improvement import (
     promote_improvement,
 )
 from .model_client import LiteLLMConfig, check_model
+from .store import Document, DocumentRevision, DocumentStore
 from .tracing import TraceWriter, utc_now
 from .view_description import view_from_tool_calls
+from .workspace import archive_document, capture_document, distill_workspace
 
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -262,6 +264,54 @@ class PromptWeb:
                 return WebResponse.json(
                     self._evaluate_fn(self.root, selected_app=pack.id, suite=suite)
                 )
+            if method == "GET" and rest == ["records"]:
+                return self._records(pack, query)
+            if method == "GET" and len(rest) == 2 and rest[0] == "records":
+                return self._record(pack, rest[1])
+            if method == "GET" and rest == ["workspace"]:
+                timezone = (parse_qs(query).get("timezone") or ["UTC"])[0].strip() or "UTC"
+                return WebResponse.json(
+                    distill_workspace(self.root, pack, timezone=timezone).model_dump()
+                )
+            if method == "POST" and rest == ["workspace", "capture"]:
+                payload = _read_json(body)
+                collection = str(payload.get("collection") or "inbox")
+                document = payload.get("document")
+                if not isinstance(document, dict):
+                    raise ValueError("document must be a JSON object")
+                document_id = payload.get("document_id")
+                timezone = str(payload.get("timezone") or "UTC").strip() or "UTC"
+                captured = capture_document(
+                    self.root,
+                    pack,
+                    collection=collection,
+                    document=document,
+                    document_id=document_id if isinstance(document_id, str) else None,
+                )
+                return WebResponse.json(
+                    {
+                        "record": captured,
+                        "workspace": distill_workspace(
+                            self.root, pack, timezone=timezone
+                        ).model_dump(),
+                    }
+                )
+            if method == "POST" and rest == ["workspace", "archive"]:
+                payload = _read_json(body)
+                document_id = str(payload.get("document_id") or "")
+                reason = str(payload.get("reason") or "archived from workspace")
+                archived = archive_document(
+                    self.root, pack, document_id, reason=reason
+                )
+                timezone = str(payload.get("timezone") or "UTC").strip() or "UTC"
+                return WebResponse.json(
+                    {
+                        "record": archived,
+                        "workspace": distill_workspace(
+                            self.root, pack, timezone=timezone
+                        ).model_dump(),
+                    }
+                )
         return WebResponse.error("not found", status=404)
 
     def _index(self) -> WebResponse:
@@ -298,6 +348,68 @@ class PromptWeb:
             "improvements": list_improvement_candidates(self.root, pack),
             "contract": contract,
         }
+
+    def _records(self, pack: AppPack, query: str) -> WebResponse:
+        params = parse_qs(query)
+        collection = params.get("collection", [None])[0] or None
+        try:
+            limit = int(params.get("limit", ["200"])[0])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("limit must be between 1 and 500") from exc
+        if not 1 <= limit <= 500:
+            raise ValueError("limit must be between 1 and 500")
+        store = self._open_store(pack)
+        if store is None:
+            return WebResponse.json(
+                {
+                    "collections": {},
+                    "collection": collection,
+                    "total": 0,
+                    "shown": 0,
+                    "records": [],
+                }
+            )
+        try:
+            collections = store.describe()
+            records = store.query(collection=collection, limit=limit)
+            total = (
+                sum(collections.values())
+                if collection is None
+                else int(collections.get(collection, 0))
+            )
+            return WebResponse.json(
+                {
+                    "collections": collections,
+                    "collection": collection,
+                    "total": total,
+                    "shown": len(records),
+                    "records": [_record_payload(item) for item in records],
+                }
+            )
+        finally:
+            store.close()
+
+    def _record(self, pack: AppPack, document_id: str) -> WebResponse:
+        store = self._open_store(pack)
+        if store is None:
+            raise KeyError(document_id)
+        try:
+            document = store.get(document_id, include_archived=True)
+            history = store.history(document_id)
+            return WebResponse.json(
+                {
+                    "record": _record_payload(document),
+                    "history": [_revision_payload(item) for item in history],
+                }
+            )
+        finally:
+            store.close()
+
+    def _open_store(self, pack: AppPack) -> DocumentStore | None:
+        database = self.root / "var" / "prompt-os.sqlite"
+        if not database.is_file():
+            return None
+        return DocumentStore(database, app_id=pack.id)
 
     def _chat(self, pack: AppPack, body: bytes) -> WebResponse:
         payload = _read_json(body)
@@ -364,6 +476,32 @@ class PromptWeb:
                 )
             ).rstrip()
         return payload
+
+
+def _record_payload(document: Document) -> dict[str, Any]:
+    return {
+        "id": document.id,
+        "collection": document.collection,
+        "document": document.value,
+        "created_at": document.created_at,
+        "updated_at": document.updated_at,
+        "archived_at": document.archived_at,
+        "archive_reason": document.archive_reason,
+        "revision": document.revision,
+    }
+
+
+def _revision_payload(revision: DocumentRevision) -> dict[str, Any]:
+    return {
+        "id": revision.id,
+        "revision": revision.revision,
+        "event": revision.event,
+        "collection": revision.collection,
+        "document": revision.value,
+        "recorded_at": revision.recorded_at,
+        "archived_at": revision.archived_at,
+        "archive_reason": revision.archive_reason,
+    }
 
 
 def _pack_summary(pack: AppPack) -> dict[str, Any]:

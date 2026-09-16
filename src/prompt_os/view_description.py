@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -48,8 +48,21 @@ class BarChartBlock(BaseModel):
     series: list[BarDatum] = Field(min_length=1)
 
 
+class LineDatum(BaseModel):
+    x: float
+    y: float | None = None
+
+
+class LineChartBlock(BaseModel):
+    type: Literal["line-chart"]
+    title: str | None = None
+    x_label: str | None = None
+    y_label: str | None = None
+    series: list[LineDatum] = Field(min_length=2, max_length=2000)
+
+
 ViewBlock = Annotated[
-    TextBlock | MetricBlock | ListBlock | TableBlock | BarChartBlock,
+    TextBlock | MetricBlock | ListBlock | TableBlock | BarChartBlock | LineChartBlock,
     Field(discriminator="type"),
 ]
 
@@ -57,3 +70,16 @@ ViewBlock = Annotated[
 class ViewDescription(BaseModel):
     title: str | None = None
     blocks: list[ViewBlock] = Field(min_length=1)
+
+
+def view_from_tool_calls(
+    tool_calls: list[dict[str, Any]] | None,
+) -> ViewDescription | None:
+    """Return the latest successful generic view from a turn's tool calls."""
+    for call in reversed(tool_calls or []):
+        if call.get("name") != "view.present" or call.get("status") == "error":
+            continue
+        view = call.get("arguments", {}).get("view")
+        if isinstance(view, dict):
+            return ViewDescription.model_validate(view)
+    return None

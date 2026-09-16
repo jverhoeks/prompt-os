@@ -21,6 +21,20 @@ The service records how time was spent and produces small, trustworthy summaries
 - Totals come from the aggregation service over stored records.
 - Early records may remain loosely structured until a proposed structure has been reviewed and promoted.
 
+## Interface
+
+Capture:
+- description (required, text)
+- duration (decimal)
+- start
+- project
+- date
+
+Show:
+- records
+- total of duration
+- duration by project
+
 ## Acceptance examples
 
 - “Yesterday I spent 2h on Acme and 45m in stand-up” records two activities on the correct local date.

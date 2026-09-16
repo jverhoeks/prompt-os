@@ -19,12 +19,15 @@ An application pack describes the service from a business perspective. It does n
 - Data contracts are generated from the business functionality, observed records and user corrections. Generated contracts are candidates until replayed and explicitly promoted.
 - The harness understands only the generic contract format. Collection names, field names, relationships and validation choices are generated application artifacts.
 - Important calculations and aggregates are performed by deterministic services.
+- Current documents are simple projections over an append-only generic revision history.
 - Proposed changes to an application pack are versioned, tested and explicitly promoted.
-- User interfaces consume generic view descriptions; they do not recreate business logic.
+- User interfaces consume generic view descriptions and distilled forms; they do not recreate business logic.
 
 ## Generic presentation
 
-Applications may describe a result using generic text, metric, list, table and bar-chart blocks. The runtime does not prescribe which blocks an application uses. The model selects the smallest useful view from the business functionality, the user request and deterministic tool results; clients decide how to render the same description.
+Applications may describe a result using generic text, metric, list, table, bar-chart and line-chart blocks. The runtime does not prescribe which blocks an application uses. The model selects the smallest useful view from the business functionality, the user request and deterministic tool results; clients decide how to render the same description. A line chart is drawn from sampled coordinates, not from a freehand sketch.
+
+Clients distill a workspace from an optional `## Interface` section in the business specification: what to capture and what to show, in ordinary language. Show lines may name a record list, a total, a grouping, a current balance, low stock, or open-only records. Types and choices can be filled in from stored records. If that section is absent, the workspace falls back to a promoted data contract, then to observed keys. Submitting a form writes storage directly. That workspace is not an application-specific screen.
 
 The view vocabulary contains no application fields, categories or workflows. A terminal client may render a table as a native grid while a browser client may render the same block as HTML. Plain textual replies remain available for clients that do not consume structured views.
 
@@ -48,7 +51,7 @@ The view vocabulary contains no application fields, categories or workflows. A t
 4. Trace capture and semantic acceptance cases.
 5. Candidate, replay and human promotion workflow.
 6. Generic calculation, time and aggregation services.
-7. CLI presentation, followed later by TUI and browser clients.
+7. CLI, TUI and local browser clients that render the same generic views.
 
 ## Generated data-contract lifecycle
 
@@ -59,26 +62,30 @@ Business functionality
         ↓
 generated candidate contract
         ↓
-structural validation and acceptance replay
+structural validation and hash-bound evidence replay
         ↓
 explicit promotion
         ↓
 current contract used by storage and reporting
 ```
 
-There is no initial business schema in an app pack. Before the first promotion, `store.put` accepts loose JSON in `inbox`. The contract-generation process proposes a small structure only after it has evidence. Later proposals are based on the current version and describe why a change is useful. Production history is immutable so a previous contract can be restored.
+There is no initial business schema in an app pack. Before the first promotion, `store.put` accepts loose JSON in `inbox`. The contract-generation process proposes a small structure only after it has evidence. Evidence identifiers resolve to immutable document revisions, functionality hashes or traces; required fields need three document revisions containing a value of the declared type. Later proposals are based on the current version and describe why a change is useful. Promotion consumes a persisted replay artifact bound to the candidate and evidence hashes. Production history is immutable so a previous contract can be restored.
 
 ## Fundamental tool blocks
 
 The first shared tool server exposes:
 
 - Clock: `system.now`
-- Storage: `store.put`, `store.get`, `store.query`, `store.scan`, `store.archive`
+- Storage: `store.put`, `store.get`, `store.query`, `store.scan`, `store.archive`, `store.history`
+- Retrieval: `store.search`
 - Structure discovery: `store.describe`
 - Deterministic reporting: `store.aggregate`
-- Contract lifecycle: `contract.current`, `contract.propose`
+- Contract lifecycle: `contract.current`, `contract.evidence`, `contract.propose`
+- Calculation: `math.evaluate`, `math.sample`
+- Conversion: `unit.convert`
+- Presentation: `view.present`
 
-Promotion is intentionally not available to the live application agent. It is an explicit operator action. Calculation, unit conversion and semantic retrieval will be added as independent fundamental services rather than application-specific code.
+Promotion is intentionally not available to the live application agent. It is an explicit operator action. Bounded calculation, unit conversion and deterministic text retrieval are independent fundamental services rather than application-specific code. Semantic ranking can be added later behind the same retrieval boundary.
 
 Trace-based functionality improvements follow the same boundary. Generation and replay first create a reviewable candidate. The operator sees the proposed business-specification diff and replay outcome, then explicitly accepts or declines it. Acceptance archives the previous manifest and functionality, promotes the candidate and increments the patch version; a live conversation cannot perform this action.
 
@@ -90,4 +97,6 @@ This boundary prevents the harness from growing a second agent framework while k
 
 ## Tracing
 
-Every application turn produces one append-only JSONL record containing the application, model, input, tool activity, reply, timing and outcome. Traces are the raw material for finding repeated failures and proposing improvements. The first version uses local files only and never records model credentials.
+Every retained application turn produces one append-only JSONL record with session and turn identity. Persistent applications retain full local traces; sensitive applications retain only timing, outcome and tool names; optional-history applications retain none. Traces are the raw material for finding repeated failures and proposing improvements, remain local and never record model credentials.
+
+Acceptance replay supports ordered multi-turn scenarios and exact deterministic state checks for document, revision and candidate counts. Functionality promotion stores per-case baseline and candidate results and rejects any candidate that turns a passing baseline case into a failure.

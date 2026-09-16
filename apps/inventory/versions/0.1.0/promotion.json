@@ -1,0 +1,5 @@
+{
+  "reason": "Expose the deterministic conversion capability already required by the business functionality.",
+  "from_version": "0.1.0",
+  "to_version": "0.1.1"
+}

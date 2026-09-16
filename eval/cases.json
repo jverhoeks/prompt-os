@@ -1,13 +1,30 @@
 {
   "format_version": 1,
   "cases": [
-    {"id": "calculator-basic", "app": "calculator", "message": "What is 17% of 84?", "required_tools": ["math.evaluate"], "minimum_documents": 0},
-    {"id": "task-capture", "app": "task-list", "message": "Remember that I need to call Alex tomorrow.", "required_tools": ["store.put"], "minimum_documents": 1},
-    {"id": "activity-capture", "app": "activity-log", "message": "Record that I spent two hours on Acme yesterday.", "required_tools": ["store.put"], "minimum_documents": 1},
-    {"id": "inventory-capture", "app": "inventory", "message": "We bought six eggs.", "required_tools": ["store.put"], "minimum_documents": 1},
-    {"id": "expense-capture", "app": "expense-log", "message": "Lunch was EUR 18.50 today.", "required_tools": ["store.put"], "minimum_documents": 1},
-    {"id": "library-capture", "app": "personal-library", "message": "I started reading Dune.", "required_tools": ["store.put"], "minimum_documents": 1},
-    {"id": "decision-capture", "app": "decision-journal", "message": "Record that we chose SQLite because deployment is simpler.", "required_tools": ["store.put"], "minimum_documents": 1}
+    {"id": "calculator-basic", "app": "calculator", "message": "What is 17% of 84?", "required_tools": ["math.evaluate"], "expected_state": {"documents": 0, "revisions": 0, "candidates": 0}},
+    {"id": "calculator-conversion", "app": "calculator", "message": "Convert 3 miles to kilometres.", "required_tools": ["unit.convert"], "expected_state": {"documents": 0, "revisions": 0, "candidates": 0}},
+    {"id": "calculator-plot", "app": "calculator", "message": "Plot y = sin(x) from -pi to pi.", "required_tools": ["math.sample"], "expected_state": {"documents": 0, "revisions": 0, "candidates": 0}},
+    {
+      "id": "task-lifecycle",
+      "app": "task-list",
+      "turns": [
+        {"message": "Remember that I need to call Alex tomorrow.", "required_tools": ["store.put"]},
+        {"message": "Mark that task complete.", "required_tools": ["store.put"]}
+      ],
+      "expected_state": {"documents": 1, "revisions": 2, "candidates": 0}
+    },
+    {"id": "activity-capture", "app": "activity-log", "message": "Record that I spent two hours on Acme yesterday.", "required_tools": ["store.put"], "expected_state": {"documents": 1, "revisions": 1, "candidates": 0}},
+    {"id": "inventory-capture", "app": "inventory", "message": "We bought six eggs.", "required_tools": ["store.put"], "expected_state": {"documents": 1, "revisions": 1, "candidates": 0}},
+    {"id": "expense-capture", "app": "expense-log", "message": "Lunch was EUR 18.50 today.", "required_tools": ["store.put"], "expected_state": {"documents": 1, "revisions": 1, "candidates": 0}},
+    {
+      "id": "library-retrieval",
+      "app": "personal-library",
+      "turns": [
+        {"message": "I started reading Dune.", "required_tools": ["store.put"]},
+        {"message": "Find the book I mentioned by searching for Dune.", "required_tools": ["store.search"]}
+      ],
+      "expected_state": {"documents": 1, "revisions": 1, "candidates": 0}
+    },
+    {"id": "decision-capture", "app": "decision-journal", "message": "Record that we chose SQLite because deployment is simpler.", "required_tools": ["store.put"], "expected_state": {"documents": 1, "revisions": 1, "candidates": 0}}
   ]
 }
-

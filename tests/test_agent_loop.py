@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from prompt_os.agent_loop import (
     StrandsSession,
     _allowed_tool_names,
@@ -96,7 +98,20 @@ def test_application_capabilities_limit_exposed_tools() -> None:
     assert "store.aggregate" in expense_tools
     assert "system.now" in expense_tools
     assert "math.evaluate" not in expense_tools
+    assert "math.sample" not in expense_tools
     assert "math.evaluate" in calculator_tools
+    assert "math.sample" in calculator_tools
+    assert "unit.convert" in calculator_tools
     assert "store.put" not in calculator_tools
     assert "view.present" in expense_tools
     assert "view.present" in calculator_tools
+
+
+def test_every_declared_capability_maps_to_a_tool() -> None:
+    from prompt_os.app_pack import discover_app_packs
+
+    for pack in discover_app_packs(ROOT / "apps"):
+        assert _allowed_tool_names(ROOT / "contracts" / "tool-catalog.json", pack.capabilities)
+
+    with pytest.raises(ValueError, match="no tools"):
+        _allowed_tool_names(ROOT / "contracts" / "tool-catalog.json", ("unknown",))

@@ -12,12 +12,15 @@ from strands import Agent
 from strands.tools.mcp import MCPAgentTool, MCPClient
 
 from .model_client import LiteLLMConfig, create_model
+from .tool_catalog import allowed_tool_names
 
 
 GENERIC_RUNTIME_POLICY = """Operate the service described below.
 Only perform services described by the business description; politely decline unrelated requests.
 Use the supplied fundamental services for facts, time, calculations and persistence.
 Do not invent stored facts or calculated values.
+Preserve exact decimal input as a JSON string; deterministic aggregation accepts decimal strings.
+Update an existing document by its identifier so its automatic revision history remains connected.
 When no data contract is promoted, new records belong in the inbox as flexible JSON.
 When structured presentation materially improves a result, call view.present with the smallest useful generic view and also provide a concise textual answer.
 The business description is authoritative for product behaviour.
@@ -38,6 +41,7 @@ class StrandsSession:
         capabilities: tuple[str, ...],
         timezone: str = "UTC",
         debug: bool = False,
+        trace_path: Path | None = None,
     ) -> None:
         parameters = StdioServerParameters(
             command=sys.executable,
@@ -48,6 +52,10 @@ class StrandsSession:
                 contract_schema=contract_schema,
                 timezone=timezone,
                 debug=debug,
+                functionality_sha256=hashlib.sha256(
+                    (functionality.rstrip() + "\n").encode("utf-8")
+                ).hexdigest(),
+                trace_path=trace_path,
             ),
         )
         self._client = MCPClient(lambda: stdio_client(parameters))
@@ -98,6 +106,7 @@ def run_turn(
     tool_catalog: Path,
     capabilities: tuple[str, ...],
     timezone: str = "UTC",
+    trace_path: Path | None = None,
 ) -> dict[str, Any]:
     with StrandsSession(
         config,
@@ -109,6 +118,7 @@ def run_turn(
         tool_catalog=tool_catalog,
         capabilities=capabilities,
         timezone=timezone,
+        trace_path=trace_path,
     ) as session:
         return session.send(user_message)
 
@@ -161,18 +171,7 @@ def _model_tools(
 
 
 def _allowed_tool_names(tool_catalog: Path, capabilities: tuple[str, ...]) -> set[str]:
-    payload = json.loads(tool_catalog.read_text(encoding="utf-8"))
-    records = payload.get("tools") if isinstance(payload, dict) else None
-    if not isinstance(records, list):
-        raise ValueError(f"{tool_catalog}: tools must be a list")
-    allowed_blocks = set(capabilities) | {"data-contract", "presentation"}
-    return {
-        record["name"]
-        for record in records
-        if isinstance(record, dict)
-        and isinstance(record.get("name"), str)
-        and record.get("block") in allowed_blocks
-    }
+    return allowed_tool_names(tool_catalog, capabilities)
 
 
 def _model_tool_name(name: str) -> str:
@@ -191,8 +190,10 @@ def _mcp_server_arguments(
     contract_schema: Path,
     timezone: str,
     debug: bool,
+    functionality_sha256: str | None = None,
+    trace_path: Path | None = None,
 ) -> list[str]:
-    return [
+    arguments = [
         "-m",
         "prompt_os.mcp_server",
         "--app",
@@ -208,3 +209,8 @@ def _mcp_server_arguments(
         "--log-level",
         "DEBUG" if debug else "ERROR",
     ]
+    if functionality_sha256:
+        arguments.extend(("--functionality-sha256", functionality_sha256))
+    if trace_path:
+        arguments.extend(("--traces", str(trace_path)))
+    return arguments

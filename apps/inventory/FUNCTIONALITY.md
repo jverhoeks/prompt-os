@@ -21,6 +21,20 @@ The service maintains a practical view of items on hand and identifies items tha
 - Similar names are not merged until identity is sufficiently clear.
 - A low-stock statement compares the stored balance with a stored replenishment level.
 
+## Interface
+
+Capture:
+- item (required)
+- quantity (required, decimal)
+- unit
+- reason
+- replenishment (decimal)
+
+Show:
+- records
+- current balance of quantity by item
+- low stock of quantity below replenishment
+
 ## Acceptance examples
 
 - “We bought six eggs” increases the egg balance by six.

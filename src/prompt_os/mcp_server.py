@@ -2,40 +2,15 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
-from pydantic import BaseModel, Field
 
+from .calculate import evaluate, sample
+from .data_contract import GeneratedDataContract
 from .tool_service import ToolService
+from .units import convert
 from .view_description import ViewDescription
-
-
-LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-
-
-class GeneratedField(BaseModel):
-    description: str
-    type: Literal[
-        "string", "integer", "number", "decimal", "boolean", "datetime", "reference", "list"
-    ]
-    required: bool
-    references: str | None = None
-    evidence: list[str] = Field(min_length=1)
-
-
-class GeneratedCollection(BaseModel):
-    description: str
-    identity: list[str]
-    fields: dict[str, GeneratedField]
-
-
-class GeneratedDataContract(BaseModel):
-    version: str
-    based_on: str | None
-    summary: str
-    collections: dict[str, GeneratedCollection]
-    open_questions: list[str]
 
 
 def _contract_value(contract: GeneratedDataContract) -> dict[str, Any]:
@@ -44,11 +19,11 @@ def _contract_value(contract: GeneratedDataContract) -> dict[str, Any]:
     return value
 
 
-def create_server(service: ToolService, *, log_level: LogLevel = "ERROR") -> FastMCP:
+def create_server(service: ToolService, *, debug: bool = False) -> FastMCP:
     server = FastMCP(
         "Prompt OS fundamentals",
         instructions="Schema-neutral storage, clock, aggregation and generated-contract lifecycle.",
-        log_level=log_level,
+        log_level="DEBUG" if debug else "ERROR",
     )
 
     @server.tool(name="system.now")
@@ -79,7 +54,11 @@ def create_server(service: ToolService, *, log_level: LogLevel = "ERROR") -> Fas
         where: dict[str, Any] | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        """Find current documents using exact matches on dotted JSON field paths."""
+        """Find current documents using exact matches on dotted JSON field paths.
+
+        Call without arguments to read recently changed documents for review or
+        structure discovery.
+        """
         return service.query(collection=collection, where=where, limit=limit)
 
     @server.tool(name="store.search")
@@ -88,11 +67,6 @@ def create_server(service: ToolService, *, log_level: LogLevel = "ERROR") -> Fas
     ) -> list[dict[str, Any]]:
         """Find relevant documents using deterministic case-insensitive term matching."""
         return service.search(query, collection=collection, limit=limit)
-
-    @server.tool(name="store.scan")
-    def store_scan(limit: int = 100) -> list[dict[str, Any]]:
-        """Read recently changed current documents for review or structure discovery."""
-        return service.scan(limit=limit)
 
     @server.tool(name="store.archive")
     def store_archive(document_id: str, reason: str) -> dict[str, Any]:
@@ -152,7 +126,7 @@ def create_server(service: ToolService, *, log_level: LogLevel = "ERROR") -> Fas
     @server.tool(name="math.evaluate")
     def math_evaluate(expression: str) -> dict[str, str]:
         """Evaluate bounded arithmetic using deterministic decimal operations."""
-        return service.calculate(expression)
+        return evaluate(expression)
 
     @server.tool(name="math.sample")
     def math_sample(
@@ -163,16 +137,14 @@ def create_server(service: ToolService, *, log_level: LogLevel = "ERROR") -> Fas
         variable: str = "x",
     ) -> dict[str, Any]:
         """Sample a univariate expression over a closed interval for a continuous plot."""
-        return service.sample(
-            expression, start=start, end=end, points=points, variable=variable
-        )
+        return sample(expression, start=start, end=end, points=points, variable=variable)
 
     @server.tool(name="unit.convert")
     def unit_convert(
         value: str | int | float, from_unit: str, to_unit: str
     ) -> dict[str, Any]:
         """Convert compatible length, mass, volume, area or temperature units."""
-        return service.convert(value, from_unit, to_unit)
+        return convert(value, from_unit, to_unit)
 
     @server.tool(name="view.present")
     def view_present(view: ViewDescription) -> dict[str, Any]:
@@ -187,19 +159,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--app", required=True)
     parser.add_argument("--database", type=Path, default=Path("var/prompt-os.sqlite"))
     parser.add_argument("--contracts", type=Path, default=Path("var/data-contracts"))
-    parser.add_argument(
-        "--contract-schema",
-        type=Path,
-        default=Path("contracts/data-contract.schema.json"),
-    )
     parser.add_argument("--functionality-sha256")
     parser.add_argument("--traces", type=Path)
     parser.add_argument("--timezone", default="UTC")
-    parser.add_argument(
-        "--log-level",
-        choices=("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"),
-        default="ERROR",
-    )
+    parser.add_argument("--debug", action="store_true")
     return parser
 
 
@@ -210,13 +173,12 @@ def main(argv: list[str] | None = None) -> int:
         app_id=args.app,
         database=args.database,
         contract_root=args.contracts,
-        contract_schema=args.contract_schema,
         timezone=args.timezone,
         functionality_sha256=args.functionality_sha256,
         trace_path=args.traces,
     )
     try:
-        create_server(service, log_level=args.log_level).run(transport="stdio")
+        create_server(service, debug=args.debug).run(transport="stdio")
     finally:
         service.close()
     return 0

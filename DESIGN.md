@@ -76,7 +76,7 @@ There is no initial business schema in an app pack. Before the first promotion, 
 The first shared tool server exposes:
 
 - Clock: `system.now`
-- Storage: `store.put`, `store.get`, `store.query`, `store.scan`, `store.archive`, `store.history`
+- Storage: `store.put`, `store.get`, `store.query`, `store.archive`, `store.history`
 - Retrieval: `store.search`
 - Structure discovery: `store.describe`
 - Deterministic reporting: `store.aggregate`

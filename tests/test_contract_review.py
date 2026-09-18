@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import shutil
 
 from prompt_os.app_pack import AppPack
 from prompt_os.contract_review import (
@@ -12,8 +11,6 @@ from prompt_os.contract_review import (
 )
 from prompt_os.tool_service import ToolService
 
-
-ROOT = Path(__file__).parents[1]
 
 
 def test_operator_reviews_replay_before_contract_promotion(tmp_path: Path) -> None:
@@ -35,18 +32,12 @@ def test_operator_reviews_replay_before_contract_promotion(tmp_path: Path) -> No
     (app_root / "FUNCTIONALITY.md").write_text(
         "# Purpose\n\nRecord labels.\n", encoding="utf-8"
     )
-    (tmp_path / "contracts").mkdir()
-    shutil.copyfile(
-        ROOT / "contracts" / "data-contract.schema.json",
-        tmp_path / "contracts" / "data-contract.schema.json",
-    )
     pack = AppPack.load(app_root)
     (tmp_path / "var").mkdir()
     service = ToolService(
         app_id=pack.id,
         database=tmp_path / "var" / "prompt-os.sqlite",
         contract_root=tmp_path / "var" / "data-contracts",
-        contract_schema=tmp_path / "contracts" / "data-contract.schema.json",
         timezone="UTC",
     )
     for index in range(3):

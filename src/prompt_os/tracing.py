@@ -10,16 +10,12 @@ import uuid
 class TraceWriter:
     """Append one self-contained JSON record per application turn."""
 
-    def __init__(
-        self,
-        path: Path,
-        *,
-        mode: Literal["full", "metadata", "off"] = "full",
-        session_id: str | None = None,
-    ) -> None:
+    def __init__(self, path: Path, *, mode: Literal["full", "metadata", "off"] = "full") -> None:
+        if mode not in ("full", "metadata", "off"):
+            raise ValueError(f"unsupported trace mode {mode!r}")
         self.path = path
         self.mode = mode
-        self.session_id = session_id or str(uuid.uuid4())
+        self.session_id = str(uuid.uuid4())
         self._turn_index = 0
 
     def write(
@@ -62,9 +58,7 @@ class TraceWriter:
                 for call in (tool_calls or [])
             ]
             record["content_redacted"] = True
-        elif self.mode != "off":
-            raise ValueError(f"unsupported trace mode {self.mode!r}")
-        if self.mode == "off":
+        else:
             return record | {"stored": False}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as stream:

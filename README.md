@@ -231,7 +231,7 @@ uv run prompt-os eval --suite all
 ```text
 apps/            reviewable products
 src/prompt_os/   generic harness (no application names)
-contracts/       tool catalog and contract schema
+contracts/       tool catalog
 eval/            business cases, not golden replies
 tests/           outcomes and invariants
 var/             local data, traces, candidates

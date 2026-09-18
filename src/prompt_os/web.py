@@ -7,11 +7,11 @@ import json
 from pathlib import Path
 import sys
 import threading
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 import webbrowser
 
-from .agent_loop import StrandsSession
+from .agent_loop import open_session
 from .app_pack import AppPack, discover_app_packs
 from .contract_review import (
     format_contract_review,
@@ -29,7 +29,8 @@ from .improvement import (
     promote_improvement,
 )
 from .model_client import LiteLLMConfig, check_model
-from .store import Document, DocumentRevision, DocumentStore
+from .store import DocumentStore
+from .tool_service import database_path
 from .tracing import TraceWriter, utc_now
 from .view_description import view_from_tool_calls
 from .workspace import archive_document, capture_document, distill_workspace
@@ -69,26 +70,13 @@ class ApplicationChat:
     def __init__(self, root: Path, pack: AppPack, *, timezone: str, debug: bool) -> None:
         config = LiteLLMConfig.from_environment()
         check_model(config)
-        data_root = root / "var"
         self.model = config.model
         self.timezone = timezone
         self.debug = debug
-        self._trace = TraceWriter(
-            data_root / "traces" / f"{pack.id}.jsonl", mode=pack.trace_mode
-        )
+        self._trace = TraceWriter(pack.trace_path(root), mode=pack.trace_mode)
         self._app_id = pack.id
-        self._session = StrandsSession(
-            config,
-            app_id=pack.id,
-            functionality=pack.functionality,
-            database=data_root / "prompt-os.sqlite",
-            contract_root=data_root / "data-contracts",
-            contract_schema=root / "contracts" / "data-contract.schema.json",
-            tool_catalog=root / "contracts" / "tool-catalog.json",
-            capabilities=pack.capabilities,
-            timezone=timezone,
-            debug=False,
-            trace_path=self._trace.path,
+        self._session = open_session(
+            config, root, pack, timezone=timezone, trace_path=self._trace.path
         )
         self._session.__enter__()
         self._lock = threading.Lock()
@@ -131,24 +119,11 @@ class ApplicationChat:
             self._session.__exit__(None, None, None)
 
 
-ChatFactory = Callable[[AppPack, str, bool], Any]
-
-
 class PromptWeb:
     """Generic browser client for conversation and operator actions."""
 
-    def __init__(
-        self,
-        root: Path,
-        *,
-        chat_factory: ChatFactory | None = None,
-        improve_fn: Callable[..., dict[str, Any]] | None = None,
-        evaluate_fn: Callable[..., dict[str, Any]] | None = None,
-    ) -> None:
+    def __init__(self, root: Path) -> None:
         self.root = root
-        self._chat_factory = chat_factory or self._open_chat
-        self._improve_fn = improve_fn or improve
-        self._evaluate_fn = evaluate_fn or collect_evaluation
         self._sessions: dict[str, Any] = {}
         self._session_lock = threading.Lock()
 
@@ -216,7 +191,7 @@ class PromptWeb:
                 )
             if method == "POST" and rest == ["improve"]:
                 payload = _read_json(body)
-                result = self._improve_fn(
+                result = improve(
                     self.root,
                     pack,
                     trace_limit=int(payload.get("trace_limit", 20)),
@@ -262,7 +237,7 @@ class PromptWeb:
                 payload = _read_json(body)
                 suite = str(payload.get("suite") or "smoke")
                 return WebResponse.json(
-                    self._evaluate_fn(self.root, selected_app=pack.id, suite=suite)
+                    collect_evaluation(self.root, selected_app=pack.id, suite=suite)
                 )
             if method == "GET" and rest == ["records"]:
                 return self._records(pack, query)
@@ -383,7 +358,7 @@ class PromptWeb:
                     "collection": collection,
                     "total": total,
                     "shown": len(records),
-                    "records": [_record_payload(item) for item in records],
+                    "records": [item.payload() for item in records],
                 }
             )
         finally:
@@ -398,15 +373,15 @@ class PromptWeb:
             history = store.history(document_id)
             return WebResponse.json(
                 {
-                    "record": _record_payload(document),
-                    "history": [_revision_payload(item) for item in history],
+                    "record": document.payload(),
+                    "history": [item.payload() for item in history],
                 }
             )
         finally:
             store.close()
 
     def _open_store(self, pack: AppPack) -> DocumentStore | None:
-        database = self.root / "var" / "prompt-os.sqlite"
+        database = database_path(self.root)
         if not database.is_file():
             return None
         return DocumentStore(database, app_id=pack.id)
@@ -440,9 +415,7 @@ class PromptWeb:
                 return existing
             if existing is not None:
                 existing.close()
-            session = self._chat_factory(pack, timezone, debug)
-            session.timezone = timezone
-            session.debug = debug
+            session = ApplicationChat(self.root, pack, timezone=timezone, debug=debug)
             self._sessions[pack.id] = session
             return session
 
@@ -451,9 +424,6 @@ class PromptWeb:
             session = self._sessions.pop(app_id, None)
         if session is not None:
             session.close()
-
-    def _open_chat(self, pack: AppPack, timezone: str, debug: bool) -> ApplicationChat:
-        return ApplicationChat(self.root, pack, timezone=timezone, debug=debug)
 
     def _improvement_payload(self, pack: AppPack, result: dict[str, Any]) -> dict[str, Any]:
         payload = dict(result)
@@ -476,32 +446,6 @@ class PromptWeb:
                 )
             ).rstrip()
         return payload
-
-
-def _record_payload(document: Document) -> dict[str, Any]:
-    return {
-        "id": document.id,
-        "collection": document.collection,
-        "document": document.value,
-        "created_at": document.created_at,
-        "updated_at": document.updated_at,
-        "archived_at": document.archived_at,
-        "archive_reason": document.archive_reason,
-        "revision": document.revision,
-    }
-
-
-def _revision_payload(revision: DocumentRevision) -> dict[str, Any]:
-    return {
-        "id": revision.id,
-        "revision": revision.revision,
-        "event": revision.event,
-        "collection": revision.collection,
-        "document": revision.value,
-        "recorded_at": revision.recorded_at,
-        "archived_at": revision.archived_at,
-        "archive_reason": revision.archive_reason,
-    }
 
 
 def _pack_summary(pack: AppPack) -> dict[str, Any]:

@@ -48,12 +48,7 @@ def test_model_check_reads_proxy_capabilities(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr("prompt_os.model_client.urlopen", fake_urlopen)
 
-    capabilities = check_model(
-        LiteLLMConfig("https://proxy.example/v1/", "secret", "chat")
-    )
-
-    assert capabilities.mode == "chat"
-    assert capabilities.supported_parameters == ("stream", "tools")
+    check_model(LiteLLMConfig("https://proxy.example/v1/", "secret", "chat"))
 
 
 def test_model_check_rejects_unavailable_model(monkeypatch: pytest.MonkeyPatch) -> None:

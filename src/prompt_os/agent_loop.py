@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 import re
 import sys
@@ -11,6 +10,7 @@ from mcp import StdioServerParameters, stdio_client
 from strands import Agent
 from strands.tools.mcp import MCPAgentTool, MCPClient
 
+from .app_pack import AppPack
 from .model_client import LiteLLMConfig, create_model
 from .tool_catalog import allowed_tool_names
 
@@ -36,7 +36,6 @@ class StrandsSession:
         functionality: str,
         database: Path,
         contract_root: Path,
-        contract_schema: Path,
         tool_catalog: Path,
         capabilities: tuple[str, ...],
         timezone: str = "UTC",
@@ -49,7 +48,6 @@ class StrandsSession:
                 app_id=app_id,
                 database=database,
                 contract_root=contract_root,
-                contract_schema=contract_schema,
                 timezone=timezone,
                 debug=debug,
                 functionality_sha256=hashlib.sha256(
@@ -61,7 +59,7 @@ class StrandsSession:
         self._client = MCPClient(lambda: stdio_client(parameters))
         self._model = create_model(config)
         self._system_prompt = f"{GENERIC_RUNTIME_POLICY}\n\n{functionality}"
-        self._allowed_tools = _allowed_tool_names(tool_catalog, capabilities)
+        self._allowed_tools = allowed_tool_names(tool_catalog, capabilities)
         self._tool_names: dict[str, str] = {}
         self.agent: Agent | None = None
 
@@ -94,33 +92,30 @@ class StrandsSession:
         }
 
 
-def run_turn(
+def open_session(
     config: LiteLLMConfig,
+    root: Path,
+    pack: AppPack,
     *,
-    app_id: str,
-    functionality: str,
-    user_message: str,
-    database: Path,
-    contract_root: Path,
-    contract_schema: Path,
-    tool_catalog: Path,
-    capabilities: tuple[str, ...],
+    database: Path | None = None,
+    contract_root: Path | None = None,
     timezone: str = "UTC",
+    debug: bool = False,
     trace_path: Path | None = None,
-) -> dict[str, Any]:
-    with StrandsSession(
+) -> StrandsSession:
+    """Build a session for one pack using the project's conventional paths."""
+    return StrandsSession(
         config,
-        app_id=app_id,
-        functionality=functionality,
-        database=database,
-        contract_root=contract_root,
-        contract_schema=contract_schema,
-        tool_catalog=tool_catalog,
-        capabilities=capabilities,
+        app_id=pack.id,
+        functionality=pack.functionality,
+        database=database or root / "var" / "prompt-os.sqlite",
+        contract_root=contract_root or root / "var" / "data-contracts",
+        tool_catalog=root / "contracts" / "tool-catalog.json",
+        capabilities=pack.capabilities,
         timezone=timezone,
+        debug=debug,
         trace_path=trace_path,
-    ) as session:
-        return session.send(user_message)
+    )
 
 
 def _tool_calls(
@@ -170,10 +165,6 @@ def _model_tools(
     return adapted
 
 
-def _allowed_tool_names(tool_catalog: Path, capabilities: tuple[str, ...]) -> set[str]:
-    return allowed_tool_names(tool_catalog, capabilities)
-
-
 def _model_tool_name(name: str) -> str:
     alias = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
     if len(alias) <= 64:
@@ -187,7 +178,6 @@ def _mcp_server_arguments(
     app_id: str,
     database: Path,
     contract_root: Path,
-    contract_schema: Path,
     timezone: str,
     debug: bool,
     functionality_sha256: str | None = None,
@@ -202,15 +192,13 @@ def _mcp_server_arguments(
         str(database),
         "--contracts",
         str(contract_root),
-        "--contract-schema",
-        str(contract_schema),
         "--timezone",
         timezone,
-        "--log-level",
-        "DEBUG" if debug else "ERROR",
     ]
     if functionality_sha256:
         arguments.extend(("--functionality-sha256", functionality_sha256))
     if trace_path:
         arguments.extend(("--traces", str(trace_path)))
+    if debug:
+        arguments.append("--debug")
     return arguments

@@ -1,5 +1,3 @@
-import sqlite3
-
 import pytest
 
 from prompt_os.store import DocumentStore
@@ -78,32 +76,6 @@ def test_search_is_deterministic_and_application_scoped(tmp_path) -> None:
     assert second.search("deployment") == []
     first.close()
     second.close()
-
-
-def test_existing_database_is_migrated_with_an_imported_revision(tmp_path) -> None:
-    database = tmp_path / "legacy.sqlite"
-    connection = sqlite3.connect(database)
-    connection.execute(
-        """
-        CREATE TABLE docs (
-            app_id TEXT NOT NULL, id TEXT NOT NULL, collection TEXT NOT NULL,
-            value_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
-            archived_at TEXT, archive_reason TEXT, PRIMARY KEY (app_id, id)
-        )
-        """
-    )
-    connection.execute(
-        "INSERT INTO docs VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)",
-        ("sample", "legacy", "inbox", '{"value":1}', "created", "updated"),
-    )
-    connection.commit()
-    connection.close()
-
-    store = DocumentStore(database, app_id="sample")
-
-    assert store.get("legacy").revision == 1
-    assert store.history("legacy")[0].event == "imported"
-    store.close()
 
 
 def test_collection_and_limit_are_validated() -> None:

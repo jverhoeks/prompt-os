@@ -5,7 +5,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.markdown import Markdown
 
-from .agent_loop import StrandsSession
+from .agent_loop import open_session
 from .app_pack import AppPack
 from .model_client import LiteLLMConfig, check_model
 from .tracing import TraceWriter, utc_now
@@ -14,24 +14,11 @@ from .tracing import TraceWriter, utc_now
 def run_chat(root: Path, pack: AppPack, *, timezone: str, debug: bool = False) -> int:
     config = LiteLLMConfig.from_environment()
     check_model(config)
-    data_root = root / "var"
-    trace = TraceWriter(
-        data_root / "traces" / f"{pack.id}.jsonl", mode=pack.trace_mode
-    )
+    trace = TraceWriter(pack.trace_path(root), mode=pack.trace_mode)
     console = Console()
     console.print(f"[bold]{pack.name}[/bold] — type [cyan]/quit[/cyan] to leave")
-    with StrandsSession(
-        config,
-        app_id=pack.id,
-        functionality=pack.functionality,
-        database=data_root / "prompt-os.sqlite",
-        contract_root=data_root / "data-contracts",
-        contract_schema=root / "contracts" / "data-contract.schema.json",
-        tool_catalog=root / "contracts" / "tool-catalog.json",
-        capabilities=pack.capabilities,
-        timezone=timezone,
-        debug=debug,
-        trace_path=trace.path,
+    with open_session(
+        config, root, pack, timezone=timezone, debug=debug, trace_path=trace.path
     ) as session:
         while True:
             try:

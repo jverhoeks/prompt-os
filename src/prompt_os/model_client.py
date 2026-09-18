@@ -30,14 +30,7 @@ class LiteLLMConfig:
         )
 
 
-@dataclass(frozen=True)
-class ModelCapabilities:
-    model: str
-    mode: str | None = None
-    supported_parameters: tuple[str, ...] = ()
-
-
-def check_model(config: LiteLLMConfig) -> ModelCapabilities:
+def check_model(config: LiteLLMConfig) -> None:
     """Fail early when the proxy cannot serve the configured chat model."""
     try:
         payload = _get_proxy_json(config, "model/info")
@@ -57,19 +50,11 @@ def check_model(config: LiteLLMConfig) -> ModelCapabilities:
         (
             record
             for record in records
-            if isinstance(record, dict) and record.get("model_name") == config.model
+            if isinstance(record, dict)
+            and config.model in (record.get("model_name"), record.get("id"))
         ),
         None,
     )
-    if match is None:
-        match = next(
-            (
-                record
-                for record in records
-                if isinstance(record, dict) and record.get("id") == config.model
-            ),
-            None,
-        )
     if match is None:
         raise RuntimeError(
             f"LiteLLM model {config.model!r} is not available to this API key"
@@ -86,17 +71,11 @@ def check_model(config: LiteLLMConfig) -> ModelCapabilities:
             f"LiteLLM model {config.model!r} does not support the tools required by the harness"
         )
 
-    parameters = info.get("supported_openai_params")
-    supported = (
-        tuple(item for item in parameters if isinstance(item, str))
-        if isinstance(parameters, list)
-        else ()
-    )
-    if supported and "tools" not in supported:
+    supported = info.get("supported_openai_params")
+    if isinstance(supported, list) and supported and "tools" not in supported:
         raise RuntimeError(
             f"LiteLLM model {config.model!r} does not accept the tools parameter"
         )
-    return ModelCapabilities(config.model, mode, supported)
 
 
 def _get_proxy_json(config: LiteLLMConfig, path: str) -> dict[str, Any]:

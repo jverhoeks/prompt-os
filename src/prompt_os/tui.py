@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +24,7 @@ from textual.widgets import (
     Static,
 )
 
-from .agent_loop import StrandsSession
+from .agent_loop import StrandsSession, open_session
 from .app_pack import AppPack
 from .model_client import LiteLLMConfig, check_model
 from .tracing import TraceWriter, utc_now
@@ -410,66 +409,21 @@ def _structured_view(view: ViewDescription) -> Vertical:
         elif isinstance(block, BarChartBlock):
             children.append(Static(_bar_chart(block), classes="view-block"))
         elif isinstance(block, LineChartBlock):
-            children.append(Static(_line_chart(block), classes="view-block"))
+            children.append(ViewTable(_line_table(block)))
     return Vertical(*children, classes="structured-view")
 
 
-def _line_chart(block: LineChartBlock) -> Text:
-    width, height = 56, 15
-    samples = [
-        (item.x, item.y)
-        for item in block.series
-        if item.y is not None and math.isfinite(item.x) and math.isfinite(item.y)
-    ]
-    title = block.title or "line chart"
-    if len(samples) < 2:
-        return Text(f"{title}\nnot enough finite samples")
-    xs = [x for x, _ in samples]
-    ys = [y for _, y in samples]
-    xmin, xmax = min(xs), max(xs)
-    ymin, ymax = min(ys), max(ys)
-    if xmin == xmax:
-        xmax = xmin + 1
-    if ymin == ymax:
-        ymin -= 1
-        ymax += 1
-    grid = [[" " for _ in range(width)] for _ in range(height)]
-
-    def cell(x: float, y: float) -> tuple[int, int]:
-        column = round((x - xmin) / (xmax - xmin) * (width - 1))
-        row = round((ymax - y) / (ymax - ymin) * (height - 1))
-        return max(0, min(width - 1, column)), max(0, min(height - 1, row))
-
-    mapped = [cell(x, y) for x, y in samples]
-    for (column, row), (next_column, next_row) in zip(mapped, mapped[1:]):
-        for mark_column, mark_row in _bresenham(column, row, next_column, next_row):
-            grid[mark_row][mark_column] = "·"
-    for column, row in mapped:
-        grid[row][column] = "●"
-    body = "\n".join("".join(line) for line in grid)
-    caption = f"{ymin:g} … {ymax:g}  ×  {xmin:g} … {xmax:g}"
-    return Text(f"{title}\n{body}\n{caption}")
-
-
-def _bresenham(x0: int, y0: int, x1: int, y1: int) -> list[tuple[int, int]]:
-    points: list[tuple[int, int]] = []
-    dx = abs(x1 - x0)
-    dy = -abs(y1 - y0)
-    step_x = 1 if x0 < x1 else -1
-    step_y = 1 if y0 < y1 else -1
-    error = dx + dy
-    x, y = x0, y0
-    while True:
-        points.append((x, y))
-        if x == x1 and y == y1:
-            return points
-        doubled = 2 * error
-        if doubled >= dy:
-            error += dy
-            x += step_x
-        if doubled <= dx:
-            error += dx
-            y += step_y
+def _line_table(block: LineChartBlock) -> TableBlock:
+    # ponytail: sampled points as a table; a plotting widget if the terminal chart matters.
+    return TableBlock(
+        type="table",
+        title=block.title,
+        columns=[block.x_label or "x", block.y_label or "y"],
+        rows=[
+            [f"{item.x:g}", "" if item.y is None else f"{item.y:g}"]
+            for item in block.series
+        ],
+    )
 
 
 def _bar_chart(block: BarChartBlock) -> Table:
@@ -537,23 +491,8 @@ def _error_message(detail: str) -> Vertical:
 def run_tui(root: Path, pack: AppPack, *, timezone: str, debug: bool = False) -> int:
     config = LiteLLMConfig.from_environment()
     check_model(config)
-    data_root = root / "var"
-    trace = TraceWriter(
-        data_root / "traces" / f"{pack.id}.jsonl", mode=pack.trace_mode
-    )
-    with StrandsSession(
-        config,
-        app_id=pack.id,
-        functionality=pack.functionality,
-        database=data_root / "prompt-os.sqlite",
-        contract_root=data_root / "data-contracts",
-        contract_schema=root / "contracts" / "data-contract.schema.json",
-        tool_catalog=root / "contracts" / "tool-catalog.json",
-        capabilities=pack.capabilities,
-        timezone=timezone,
-        debug=False,
-        trace_path=trace.path,
-    ) as session:
+    trace = TraceWriter(pack.trace_path(root), mode=pack.trace_mode)
+    with open_session(config, root, pack, timezone=timezone, trace_path=trace.path) as session:
         PromptTUI(
             pack=pack,
             session=session,

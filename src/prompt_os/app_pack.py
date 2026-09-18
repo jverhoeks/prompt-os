@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 import re
 from typing import Literal
 
-from .tool_catalog import load_tool_catalog
+from .tool_catalog import tool_blocks
 
 
 APP_ID = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
@@ -40,6 +41,13 @@ class AppPack:
     @property
     def trace_mode(self) -> Literal["full", "metadata", "off"]:
         return TRACE_MODE_BY_DATA_POLICY[self.data_policy]
+
+    @property
+    def functionality_sha256(self) -> str:
+        return hashlib.sha256((self.functionality.rstrip() + "\n").encode("utf-8")).hexdigest()
+
+    def trace_path(self, root: Path) -> Path:
+        return root / "var" / "traces" / f"{self.id}.jsonl"
 
     @classmethod
     def load(cls, path: Path) -> "AppPack":
@@ -111,7 +119,7 @@ def discover_app_packs(root: Path, *, tool_catalog: Path | None = None) -> list[
     packs = [AppPack.load(root / name) for name in names]
     catalog_path = tool_catalog or root.parent / "contracts" / "tool-catalog.json"
     if catalog_path.is_file():
-        blocks = {record.block for record in load_tool_catalog(catalog_path)}
+        blocks = set(tool_blocks(catalog_path).values())
         for pack in packs:
             missing_blocks = sorted(set(pack.capabilities) - blocks)
             if missing_blocks:

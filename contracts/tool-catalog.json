@@ -6,7 +6,6 @@
     {"name": "store.get", "block": "documents", "purpose": "Read one application-scoped document.", "mutates": false},
     {"name": "store.query", "block": "documents", "purpose": "Find documents using exact JSON field matches.", "mutates": false},
     {"name": "store.search", "block": "retrieval", "purpose": "Find relevant documents using deterministic text matching.", "mutates": false},
-    {"name": "store.scan", "block": "documents", "purpose": "Read recent documents for structure discovery and review.", "mutates": false},
     {"name": "store.archive", "block": "documents", "purpose": "Soft-delete a document while retaining history.", "mutates": true},
     {"name": "store.history", "block": "documents", "purpose": "Read the append-only revisions of one document.", "mutates": false},
     {"name": "store.describe", "block": "documents", "purpose": "Return collection counts and the current generated contract.", "mutates": false},

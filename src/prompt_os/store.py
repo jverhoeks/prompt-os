@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 import json
@@ -28,6 +28,9 @@ class Document:
     archive_reason: str | None
     revision: int
 
+    def payload(self) -> dict[str, Any]:
+        return _payload(self)
+
 
 @dataclass(frozen=True)
 class DocumentRevision:
@@ -40,6 +43,17 @@ class DocumentRevision:
     recorded_at: str
     archived_at: str | None
     archive_reason: str | None
+
+    def payload(self) -> dict[str, Any]:
+        return _payload(self)
+
+
+def _payload(record: Document | DocumentRevision) -> dict[str, Any]:
+    """JSON-friendly client view: drop the app scope, expose value as document."""
+    data = asdict(record)
+    del data["app_id"]
+    data["document"] = data.pop("value")
+    return data
 
 
 class DocumentStore:
@@ -69,13 +83,6 @@ class DocumentStore:
             )
             """
         )
-        columns = {
-            row["name"] for row in self._connection.execute("PRAGMA table_info(docs)")
-        }
-        if "revision" not in columns:
-            self._connection.execute(
-                "ALTER TABLE docs ADD COLUMN revision INTEGER NOT NULL DEFAULT 1"
-            )
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS document_revisions (
@@ -90,17 +97,6 @@ class DocumentStore:
                 archive_reason TEXT,
                 PRIMARY KEY (app_id, id, revision)
             )
-            """
-        )
-        self._connection.execute(
-            """
-            INSERT OR IGNORE INTO document_revisions (
-                app_id, id, revision, event, collection, value_json,
-                recorded_at, archived_at, archive_reason
-            )
-            SELECT app_id, id, revision, 'imported', collection, value_json,
-                   updated_at, archived_at, archive_reason
-            FROM docs
             """
         )
         self._connection.execute(
@@ -201,9 +197,6 @@ class DocumentStore:
         if not 1 <= limit <= 500:
             raise ValueError("limit must be between 1 and 500")
         return self._select(collection=collection, where=where, limit=limit)
-
-    def scan(self, *, limit: int = 100) -> list[Document]:
-        return self.query(limit=limit)
 
     def search(
         self, query: str, *, collection: str | None = None, limit: int = 20

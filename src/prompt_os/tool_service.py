@@ -7,11 +7,17 @@ from pathlib import Path
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
-from .calculate import evaluate as evaluate_expression
-from .calculate import sample as sample_expression
-from .data_contract import DataContractRepository
-from .store import DECIMAL, Document, DocumentRevision, DocumentStore
-from .units import convert
+from .app_pack import AppPack
+from .data_contract import DataContractRepository, matches_type
+from .store import DocumentStore
+
+
+def database_path(root: Path) -> Path:
+    return root / "var" / "prompt-os.sqlite"
+
+
+def contract_root(root: Path) -> Path:
+    return root / "var" / "data-contracts"
 
 
 class ToolService:
@@ -23,7 +29,6 @@ class ToolService:
         app_id: str,
         database: str | Path,
         contract_root: Path,
-        contract_schema: Path,
         timezone: str,
         functionality_sha256: str | None = None,
         trace_path: Path | None = None,
@@ -31,9 +36,21 @@ class ToolService:
         self.app_id = app_id
         self.timezone = ZoneInfo(timezone)
         self.store = DocumentStore(database, app_id=app_id)
-        self.contracts = DataContractRepository(contract_root, contract_schema)
+        self.contracts = DataContractRepository(contract_root)
         self.functionality_sha256 = functionality_sha256
         self.trace_path = trace_path
+
+    @classmethod
+    def for_pack(cls, root: Path, pack: AppPack, *, timezone: str = "UTC") -> "ToolService":
+        database_path(root).parent.mkdir(parents=True, exist_ok=True)
+        return cls(
+            app_id=pack.id,
+            database=database_path(root),
+            contract_root=contract_root(root),
+            timezone=timezone,
+            functionality_sha256=pack.functionality_sha256,
+            trace_path=pack.trace_path(root),
+        )
 
     def close(self) -> None:
         self.store.close()
@@ -62,10 +79,10 @@ class ToolService:
             if collection is None:
                 raise ValueError("collection is required after a contract is promoted")
             self._validate_document(contract, target, document)
-        return self._document(self.store.put(target, document, document_id))
+        return self.store.put(target, document, document_id).payload()
 
     def get(self, document_id: str) -> dict[str, Any]:
-        return self._document(self.store.get(document_id))
+        return self.store.get(document_id).payload()
 
     def query(
         self,
@@ -75,28 +92,23 @@ class ToolService:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         return [
-            self._document(doc)
-            for doc in self.store.query(
-                collection=collection, where=where, limit=limit
-            )
+            doc.payload()
+            for doc in self.store.query(collection=collection, where=where, limit=limit)
         ]
 
     def search(
         self, query: str, *, collection: str | None = None, limit: int = 20
     ) -> list[dict[str, Any]]:
         return [
-            self._document(doc)
+            doc.payload()
             for doc in self.store.search(query, collection=collection, limit=limit)
         ]
 
-    def scan(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        return [self._document(doc) for doc in self.store.scan(limit=limit)]
-
     def archive(self, document_id: str, reason: str) -> dict[str, Any]:
-        return self._document(self.store.archive(document_id, reason))
+        return self.store.archive(document_id, reason).payload()
 
     def history(self, document_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
-        return [self._revision(item) for item in self.store.history(document_id, limit=limit)]
+        return [item.payload() for item in self.store.history(document_id, limit=limit)]
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -196,86 +208,6 @@ class ToolService:
             available_evidence=self.contract_evidence(),
         )
 
-    def calculate(self, expression: str) -> dict[str, str]:
-        return evaluate_expression(expression)
-
-    def sample(
-        self,
-        expression: str,
-        *,
-        start: str | int | float,
-        end: str | int | float,
-        points: int = 240,
-        variable: str = "x",
-    ) -> dict[str, Any]:
-        return sample_expression(
-            expression, start=start, end=end, points=points, variable=variable
-        )
-
-    def convert(
-        self, value: str | int | float, from_unit: str, to_unit: str
-    ) -> dict[str, Any]:
-        return convert(value, from_unit, to_unit)
-
-    def call(self, name: str, arguments: Mapping[str, Any]) -> Any:
-        dispatch = {
-            "system.now": lambda: self.now(),
-            "store.put": lambda: self.put(
-                arguments["document"],
-                collection=arguments.get("collection"),
-                document_id=arguments.get("document_id"),
-            ),
-            "store.get": lambda: self.get(arguments["document_id"]),
-            "store.query": lambda: self.query(
-                collection=arguments.get("collection"),
-                where=arguments.get("where"),
-                limit=arguments.get("limit", 100),
-            ),
-            "store.search": lambda: self.search(
-                arguments["query"],
-                collection=arguments.get("collection"),
-                limit=arguments.get("limit", 20),
-            ),
-            "store.scan": lambda: self.scan(limit=arguments.get("limit", 100)),
-            "store.archive": lambda: self.archive(arguments["document_id"], arguments["reason"]),
-            "store.history": lambda: self.history(
-                arguments["document_id"], limit=arguments.get("limit", 100)
-            ),
-            "store.describe": lambda: self.describe(),
-            "store.aggregate": lambda: self.aggregate(
-                arguments["operation"],
-                collection=arguments.get("collection"),
-                field=arguments.get("field"),
-                group_by=arguments.get("group_by"),
-                where=arguments.get("where"),
-            ),
-            "contract.current": lambda: {"contract": self.contracts.current(self.app_id)},
-            "contract.evidence": lambda: {
-                "evidence": self.listed_contract_evidence(
-                    limit=arguments.get("limit", 100)
-                )
-            },
-            "contract.propose": lambda: self.propose_contract(
-                arguments["contract"],
-                rationale=arguments["rationale"],
-                evidence=arguments["evidence"],
-            ),
-            "math.evaluate": lambda: self.calculate(arguments["expression"]),
-            "math.sample": lambda: self.sample(
-                arguments["expression"],
-                start=arguments["start"],
-                end=arguments["end"],
-                points=arguments.get("points", 240),
-                variable=arguments.get("variable", "x"),
-            ),
-            "unit.convert": lambda: self.convert(
-                arguments["value"], arguments["from_unit"], arguments["to_unit"]
-            ),
-        }
-        if name not in dispatch:
-            raise KeyError(f"unknown tool {name!r}")
-        return dispatch[name]()
-
     @staticmethod
     def _validate_document(
         contract: Mapping[str, Any], collection: str, document: Mapping[str, Any]
@@ -296,47 +228,5 @@ class ToolService:
             raise ValueError(f"missing required fields: {', '.join(missing)}")
         for name, value in document.items():
             expected = fields[name]["type"]
-            if not ToolService._matches_type(expected, value):
+            if not matches_type(expected, value):
                 raise ValueError(f"field {name!r} must be {expected}")
-
-    @staticmethod
-    def _matches_type(expected: str, value: Any) -> bool:
-        if expected in {"string", "datetime", "reference"}:
-            return isinstance(value, str)
-        if expected == "integer":
-            return isinstance(value, int) and not isinstance(value, bool)
-        if expected == "number":
-            return isinstance(value, (int, float)) and not isinstance(value, bool)
-        if expected == "decimal":
-            return isinstance(value, str) and DECIMAL.fullmatch(value) is not None
-        if expected == "boolean":
-            return isinstance(value, bool)
-        if expected == "list":
-            return isinstance(value, list)
-        return False
-
-    @staticmethod
-    def _document(document: Document) -> dict[str, Any]:
-        return {
-            "id": document.id,
-            "collection": document.collection,
-            "document": document.value,
-            "created_at": document.created_at,
-            "updated_at": document.updated_at,
-            "archived_at": document.archived_at,
-            "archive_reason": document.archive_reason,
-            "revision": document.revision,
-        }
-
-    @staticmethod
-    def _revision(revision: DocumentRevision) -> dict[str, Any]:
-        return {
-            "id": revision.id,
-            "revision": revision.revision,
-            "event": revision.event,
-            "collection": revision.collection,
-            "document": revision.value,
-            "recorded_at": revision.recorded_at,
-            "archived_at": revision.archived_at,
-            "archive_reason": revision.archive_reason,
-        }

@@ -102,7 +102,7 @@ def test_tui_edits_input_and_renders_generic_markdown() -> None:
             assert len(app.query(".assistant-message")) == 1
             assert len(app.query(Markdown)) == 1
             assert len(app.query(".structured-view")) == 1
-            assert len(app.query(DataTable)) == 1
+            assert len(app.query(DataTable)) == 2
             assert trace.records[0]["outcome"] == "completed"
 
     asyncio.run(scenario())
@@ -115,7 +115,7 @@ def test_tui_only_shows_tool_activity_in_debug_mode() -> None:
             session=_Session(
                 {
                     "reply": "Done.",
-                    "tool_calls": [{"name": "store.scan", "arguments": {}}],
+                    "tool_calls": [{"name": "store.query", "arguments": {}}],
                 }
             ),  # type: ignore[arg-type]
             trace=_Trace(),  # type: ignore[arg-type]

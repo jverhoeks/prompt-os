@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .agent_loop import StrandsSession
+from .agent_loop import open_session
 from .app_pack import AppPack
 from .model_client import LiteLLMConfig
 from .tool_service import ToolService
@@ -29,15 +29,12 @@ def run_case(
     ]
     turn_results: list[dict[str, Any]] = []
     try:
-        with StrandsSession(
+        with open_session(
             config,
-            app_id=pack.id,
-            functionality=pack.functionality,
+            root,
+            pack,
             database=database,
             contract_root=contract_root,
-            contract_schema=root / "contracts" / "data-contract.schema.json",
-            tool_catalog=root / "contracts" / "tool-catalog.json",
-            capabilities=pack.capabilities,
             trace_path=trace.path if trace else None,
         ) as session:
             for turn in turns:
@@ -52,16 +49,12 @@ def run_case(
                     }
                     missing = sorted(set(turn.get("required_tools", [])) - successful)
                     forbidden = sorted(set(turn.get("forbidden_tools", [])) & used)
-                    tool_errors = [
-                        call["name"]
-                        for call in outcome["tool_calls"]
-                        if call.get("status") == "error"
-                    ]
                     tool_error_details = [
                         {"name": call["name"], "result": call.get("result")}
                         for call in outcome["tool_calls"]
                         if call.get("status") == "error"
                     ]
+                    tool_errors = [detail["name"] for detail in tool_error_details]
                     passed = not missing and not forbidden and bool(outcome["reply"].strip())
                     result = {
                         "message": turn["message"],
@@ -117,11 +110,7 @@ def run_case(
             )
 
     inspector = ToolService(
-        app_id=pack.id,
-        database=database,
-        contract_root=contract_root,
-        contract_schema=root / "contracts" / "data-contract.schema.json",
-        timezone="UTC",
+        app_id=pack.id, database=database, contract_root=contract_root, timezone="UTC"
     )
     try:
         document_count = sum(inspector.store.describe().values())

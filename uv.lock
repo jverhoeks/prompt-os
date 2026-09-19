@@ -9,7 +9,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-09-04T08:17:10.409285Z"
+exclude-newer = "2026-09-11T07:50:24.211523Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -1419,9 +1419,7 @@ name = "prompt-os"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "jsonschema" },
     { name = "mcp" },
-    { name = "python-dotenv" },
     { name = "rich" },
     { name = "strands-agents", extra = ["litellm"] },
     { name = "textual" },
@@ -1434,10 +1432,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "jsonschema", specifier = ">=4.20,<5" },
     { name = "mcp", specifier = ">=1.27,<2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<9" },
-    { name = "python-dotenv", specifier = ">=1.0,<2" },
     { name = "rich", specifier = ">=13,<15" },
     { name = "strands-agents", extras = ["litellm"], specifier = ">=1.30,<2" },
     { name = "textual", specifier = ">=1,<7" },

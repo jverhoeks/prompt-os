@@ -36,7 +36,6 @@ Preserve the existing Purpose, Services, Operating rules and Acceptance examples
 Return the complete revised functionality when a change is needed.
 """
 
-SEMANTIC_VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 CANDIDATE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -96,9 +95,7 @@ def improve(root: Path, pack: AppPack, *, trace_limit: int = 20) -> dict[str, An
         "app_id": pack.id,
         "created_at": datetime.now(UTC).isoformat(),
         "source_version": pack.version,
-        "source_functionality_sha256": hashlib.sha256(
-            (pack.functionality.rstrip() + "\n").encode("utf-8")
-        ).hexdigest(),
+        "source_functionality_sha256": pack.functionality_sha256,
         "candidate_functionality_sha256": hashlib.sha256(
             candidate_path.read_bytes()
         ).hexdigest(),
@@ -277,12 +274,9 @@ def promote_improvement(root: Path, pack: AppPack, result: dict[str, Any]) -> di
     current = AppPack.load(pack.path)
     if current.version != pack.version or current.functionality != pack.functionality:
         raise ValueError("production application changed after the candidate was created")
-    current_hash = hashlib.sha256(
-        (current.functionality.rstrip() + "\n").encode("utf-8")
-    ).hexdigest()
     if (
         report.get("source_version") != current.version
-        or report.get("source_functionality_sha256") != current_hash
+        or report.get("source_functionality_sha256") != current.functionality_sha256
     ):
         raise ValueError("production application changed after the candidate was created")
     next_version = _bump_patch(current.version)
@@ -368,10 +362,7 @@ def promote_improvement(root: Path, pack: AppPack, result: dict[str, Any]) -> di
 
 
 def _bump_patch(version: str) -> str:
-    match = SEMANTIC_VERSION.fullmatch(version)
-    if match is None:
-        raise ValueError(f"invalid semantic version {version!r}")
-    major, minor, patch = (int(part) for part in match.groups())
+    major, minor, patch = map(int, version.split("."))
     return f"{major}.{minor}.{patch + 1}"
 
 

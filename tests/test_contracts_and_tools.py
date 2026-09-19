@@ -6,7 +6,9 @@ import pytest
 
 from prompt_os.data_contract import DataContractRepository
 from prompt_os.mcp_server import GeneratedDataContract, _contract_value, create_server
+from prompt_os.calculate import evaluate, sample
 from prompt_os.model_client import LiteLLMConfig
+from prompt_os.units import convert
 from prompt_os.tool_service import ToolService
 from prompt_os.cli import main
 
@@ -52,9 +54,7 @@ def generated_contract(
 
 
 def test_generated_contract_is_candidate_until_replay_gated_promotion(tmp_path: Path) -> None:
-    repository = DataContractRepository(
-        tmp_path / "contracts", ROOT / "contracts" / "data-contract.schema.json"
-    )
+    repository = DataContractRepository(tmp_path / "contracts")
     candidate = repository.propose(
         "sample-app",
         generated_contract(),
@@ -91,9 +91,7 @@ def test_initial_generated_contract_keeps_explicit_null_base_version() -> None:
 
 
 def test_required_generated_field_needs_three_examples(tmp_path: Path) -> None:
-    repository = DataContractRepository(
-        tmp_path / "contracts", ROOT / "contracts" / "data-contract.schema.json"
-    )
+    repository = DataContractRepository(tmp_path / "contracts")
     contract = generated_contract()
     contract["collections"]["things"]["fields"]["label"]["evidence"] = [EVIDENCE[0]]
     with pytest.raises(ValueError, match="three supporting examples"):
@@ -118,9 +116,7 @@ def test_required_generated_field_needs_three_examples(tmp_path: Path) -> None:
 def test_contract_replay_is_bound_to_candidate_and_immutable_evidence(
     tmp_path: Path,
 ) -> None:
-    repository = DataContractRepository(
-        tmp_path / "contracts", ROOT / "contracts" / "data-contract.schema.json"
-    )
+    repository = DataContractRepository(tmp_path / "contracts")
     available = available_evidence()
     candidate = repository.propose(
         "sample-app",
@@ -150,7 +146,6 @@ def test_tool_service_uses_inbox_then_promoted_contract(tmp_path: Path) -> None:
         app_id="sample-app",
         database=tmp_path / "db.sqlite",
         contract_root=tmp_path / "contracts",
-        contract_schema=ROOT / "contracts" / "data-contract.schema.json",
         timezone="UTC",
     )
     loose = service.put({"raw": "unstructured first record"})
@@ -183,15 +178,14 @@ def test_document_store_is_isolated_by_application(tmp_path: Path) -> None:
     common = dict(
         database=tmp_path / "db.sqlite",
         contract_root=tmp_path / "contracts",
-        contract_schema=ROOT / "contracts" / "data-contract.schema.json",
         timezone="UTC",
     )
     first = ToolService(app_id="first-app", **common)
     second = ToolService(app_id="second-app", **common)
     first.put({"private": "first"})
     second.put({"private": "second"})
-    assert [row["document"] for row in first.scan()] == [{"private": "first"}]
-    assert [row["document"] for row in second.scan()] == [{"private": "second"}]
+    assert [row["document"] for row in first.query()] == [{"private": "first"}]
+    assert [row["document"] for row in second.query()] == [{"private": "second"}]
     first.close()
     second.close()
 
@@ -201,7 +195,6 @@ def test_mcp_server_matches_the_fundamental_tool_catalog(tmp_path: Path) -> None
         app_id="sample-app",
         database=tmp_path / "db.sqlite",
         contract_root=tmp_path / "contracts",
-        contract_schema=ROOT / "contracts" / "data-contract.schema.json",
         timezone="UTC",
     )
 
@@ -213,44 +206,26 @@ def test_mcp_server_matches_the_fundamental_tool_catalog(tmp_path: Path) -> None
     service.close()
 
 
-def test_math_service_is_deterministic_and_bounded(tmp_path: Path) -> None:
-    service = ToolService(
-        app_id="sample-app",
-        database=tmp_path / "db.sqlite",
-        contract_root=tmp_path / "contracts",
-        contract_schema=ROOT / "contracts" / "data-contract.schema.json",
-        timezone="UTC",
-    )
-    assert service.calculate("84 * 0.17")["value"] == "14.28"
-    assert float(service.calculate("sin(0)")["value"]) == 0
-    sampled = service.sample("sin(x)", start="-pi", end="pi", points=5)
+def test_math_service_is_deterministic_and_bounded() -> None:
+    assert evaluate("84 * 0.17")["value"] == "14.28"
+    assert float(evaluate("sin(0)")["value"]) == 0
+    sampled = sample("sin(x)", start="-pi", end="pi", points=5)
     assert sampled["count"] == 5
     assert sampled["points"][2]["y"] == pytest.approx(0, abs=1e-10)
     with pytest.raises(ValueError, match="unsupported"):
-        service.calculate("__import__('os').getcwd()")
-    service.close()
+        evaluate("__import__('os').getcwd()")
 
 
-def test_unit_conversion_is_deterministic_and_rejects_incompatible_units(
-    tmp_path: Path,
-) -> None:
-    service = ToolService(
-        app_id="sample-app",
-        database=tmp_path / "db.sqlite",
-        contract_root=tmp_path / "contracts",
-        contract_schema=ROOT / "contracts" / "data-contract.schema.json",
-        timezone="UTC",
-    )
-    conversion = service.convert("3", "miles", "km")
+def test_unit_conversion_is_deterministic_and_rejects_incompatible_units() -> None:
+    conversion = convert("3", "miles", "km")
     assert conversion["output"] == {
         "value": "4.828032",
         "unit": "kilometre",
     }
     assert "1609.344" in conversion["basis"]
-    assert service.convert("32", "fahrenheit", "celsius")["output"]["value"] == "0"
+    assert convert("32", "fahrenheit", "celsius")["output"]["value"] == "0"
     with pytest.raises(ValueError, match="different kinds"):
-        service.convert("10", "metres", "kilograms")
-    service.close()
+        convert("10", "metres", "kilograms")
 
 
 def test_contract_trace_evidence_is_hash_bound_without_exposing_content(
@@ -274,7 +249,6 @@ def test_contract_trace_evidence_is_hash_bound_without_exposing_content(
         app_id="sample-app",
         database=tmp_path / "db.sqlite",
         contract_root=tmp_path / "contracts",
-        contract_schema=ROOT / "contracts" / "data-contract.schema.json",
         timezone="UTC",
         trace_path=trace_path,
     )

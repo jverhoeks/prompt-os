@@ -7,11 +7,11 @@ import pytest
 
 from prompt_os.agent_loop import (
     StrandsSession,
-    _allowed_tool_names,
     _mcp_server_arguments,
     _model_tool_name,
     _tool_calls,
 )
+from prompt_os.tool_catalog import allowed_tool_names as _allowed_tool_names
 
 
 ROOT = Path(__file__).parents[1]
@@ -65,12 +65,11 @@ def test_session_sets_error_only_mcp_logging_by_default() -> None:
         app_id="sample",
         database=Path("db.sqlite"),
         contract_root=Path("contracts"),
-        contract_schema=Path("schema.json"),
         timezone="UTC",
         debug=False,
     )
 
-    assert arguments[-2:] == ["--log-level", "ERROR"]
+    assert "--debug" not in arguments
 
 
 def test_session_enables_mcp_debug_logging_explicitly() -> None:
@@ -78,12 +77,11 @@ def test_session_enables_mcp_debug_logging_explicitly() -> None:
         app_id="sample",
         database=Path("db.sqlite"),
         contract_root=Path("contracts"),
-        contract_schema=Path("schema.json"),
         timezone="UTC",
         debug=True,
     )
 
-    assert arguments[-2:] == ["--log-level", "DEBUG"]
+    assert arguments[-1] == "--debug"
 
 
 def test_application_capabilities_limit_exposed_tools() -> None:

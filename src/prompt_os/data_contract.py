@@ -8,14 +8,103 @@ import os
 from pathlib import Path
 import re
 from tempfile import NamedTemporaryFile
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 import uuid
 
-from jsonschema import Draft202012Validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 
 APP_ID = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 DECIMAL = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$")
+FIELD_NAME = re.compile(r"^[a-z][a-z0-9_]{0,62}$")
+COLLECTION_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,62}$")
+FieldType = Literal[
+    "string", "integer", "number", "decimal", "boolean", "datetime", "reference", "list"
+]
+
+
+def _unique(values: list[str]) -> list[str]:
+    if len(values) != len(set(values)):
+        raise ValueError("entries must be unique")
+    return values
+
+
+def _named(pattern: re.Pattern[str], values: dict[str, Any]) -> dict[str, Any]:
+    bad = [name for name in values if not pattern.fullmatch(name)]
+    if bad:
+        raise ValueError(f"invalid names: {', '.join(bad)}")
+    return values
+
+
+class GeneratedField(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    description: str = Field(min_length=1)
+    type: FieldType
+    required: bool
+    references: str | None = None
+    evidence: list[str] = Field(min_length=1)
+
+    _unique_evidence = field_validator("evidence")(_unique)
+
+
+class GeneratedCollection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    description: str = Field(min_length=1)
+    identity: list[str]
+    fields: dict[str, GeneratedField] = Field(min_length=1, max_length=12)
+
+    _unique_identity = field_validator("identity")(_unique)
+
+    @field_validator("fields")
+    @classmethod
+    def _field_names(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return _named(FIELD_NAME, value)
+
+
+class GeneratedDataContract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    version: str = Field(pattern=r"^[0-9]+\.[0-9]+\.[0-9]+$")
+    based_on: str | None
+    summary: str = Field(min_length=1)
+    collections: dict[str, GeneratedCollection] = Field(min_length=1, max_length=8)
+    open_questions: list[str]
+
+    _unique_questions = field_validator("open_questions")(_unique)
+
+    @field_validator("collections")
+    @classmethod
+    def _collection_names(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return _named(COLLECTION_NAME, value)
+
+
+def matches_type(expected: str, value: Any) -> bool:
+    if expected in {"string", "datetime", "reference"}:
+        return isinstance(value, str)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "decimal":
+        return isinstance(value, str) and DECIMAL.fullmatch(value) is not None
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "list":
+        return isinstance(value, list)
+    return False
+
+
+def atomic_write(path: Path, data: bytes) -> None:
+    with NamedTemporaryFile("wb", dir=path.parent, prefix=f".{path.name}.", delete=False) as stream:
+        stream.write(data)
+        temporary = Path(stream.name)
+    try:
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def write_json(path: Path, value: Mapping[str, Any]) -> None:
+    atomic_write(path, (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
 
 
 @dataclass(frozen=True)
@@ -32,10 +121,8 @@ class ContractCandidate:
 class DataContractRepository:
     """Validate, replay and version generated schema-neutral contract artifacts."""
 
-    def __init__(self, root: Path, schema_path: Path) -> None:
+    def __init__(self, root: Path) -> None:
         self.root = root
-        schema = json.loads(schema_path.read_text(encoding="utf-8"))
-        self._validator = Draft202012Validator(schema)
 
     def current(self, app_id: str) -> dict[str, Any] | None:
         path = self._app_root(app_id) / "current.json"
@@ -69,9 +156,7 @@ class DataContractRepository:
         candidate_root = self._app_root(app_id) / "candidates" / candidate_id
         candidate_root.mkdir(parents=True, exist_ok=False)
         candidate_path = candidate_root / "contract.json"
-        candidate_path.write_text(
-            json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
+        write_json(candidate_path, value)
         metadata = {
             "id": candidate_id,
             "app_id": app_id,
@@ -81,7 +166,7 @@ class DataContractRepository:
             "created_at": created_at,
             "status": "candidate",
         }
-        self._write_json(candidate_root / "metadata.json", metadata)
+        write_json(candidate_root / "metadata.json", metadata)
         return ContractCandidate(
             id=candidate_id,
             app_id=app_id,
@@ -139,7 +224,7 @@ class DataContractRepository:
             "checks": checks,
             "passed": all(check["passed"] for check in checks),
         }
-        self._write_json(candidate_root / "replay.json", replay)
+        write_json(candidate_root / "replay.json", replay)
         return replay
 
     def promote(
@@ -179,14 +264,14 @@ class DataContractRepository:
             if self._hash_file(version_path) != self._hash_file(candidate_path):
                 raise ValueError("contract version already exists with different content")
         else:
-            self._replace_from_file(candidate_path, version_path)
+            atomic_write(version_path, candidate_path.read_bytes())
         current_path = app_root / "current.json"
-        self._replace_from_file(candidate_path, current_path)
+        atomic_write(current_path, candidate_path.read_bytes())
 
         metadata["status"] = "promoted"
         metadata["promoted_at"] = datetime.now(UTC).isoformat()
         metadata["replay_id"] = replay_id
-        self._write_json(candidate_root / "metadata.json", metadata)
+        write_json(candidate_root / "metadata.json", metadata)
         return contract
 
     def candidates(self, app_id: str) -> list[dict[str, Any]]:
@@ -222,12 +307,14 @@ class DataContractRepository:
             raise ValueError("candidate content changed after proposal")
         return candidate_root, contract, metadata
 
-    def _validate_contract(self, value: Mapping[str, Any]) -> None:
-        errors = sorted(self._validator.iter_errors(value), key=lambda error: list(error.path))
-        if errors:
-            first = errors[0]
-            location = ".".join(str(part) for part in first.absolute_path) or "$"
-            raise ValueError(f"invalid data contract at {location}: {first.message}")
+    @staticmethod
+    def _validate_contract(value: Mapping[str, Any]) -> None:
+        try:
+            GeneratedDataContract.model_validate(value)
+        except ValidationError as exc:
+            first = exc.errors()[0]
+            location = ".".join(str(part) for part in first["loc"]) or "$"
+            raise ValueError(f"invalid data contract at {location}: {first['msg']}") from exc
 
     @staticmethod
     def _validate_evidence(
@@ -264,9 +351,7 @@ class DataContractRepository:
                             raise ValueError(
                                 f"evidence {evidence_id!r} does not contain field {name!r}"
                             )
-                        if not DataContractRepository._matches_type(
-                            field["type"], document[name]
-                        ):
+                        if not matches_type(field["type"], document[name]):
                             raise ValueError(
                                 f"evidence {evidence_id!r} has the wrong type for field {name!r}"
                             )
@@ -285,22 +370,6 @@ class DataContractRepository:
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
-    @staticmethod
-    def _matches_type(expected: str, value: Any) -> bool:
-        if expected in {"string", "datetime", "reference"}:
-            return isinstance(value, str)
-        if expected == "integer":
-            return isinstance(value, int) and not isinstance(value, bool)
-        if expected == "number":
-            return isinstance(value, (int, float)) and not isinstance(value, bool)
-        if expected == "decimal":
-            return isinstance(value, str) and DECIMAL.fullmatch(value) is not None
-        if expected == "boolean":
-            return isinstance(value, bool)
-        if expected == "list":
-            return isinstance(value, list)
-        return False
-
     def _app_root(self, app_id: str) -> Path:
         if not APP_ID.fullmatch(app_id):
             raise ValueError("invalid application id")
@@ -313,30 +382,5 @@ class DataContractRepository:
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
     @staticmethod
-    def _write_json(path: Path, value: Mapping[str, Any]) -> None:
-        encoded = json.dumps(value, indent=2, ensure_ascii=False) + "\n"
-        with NamedTemporaryFile(
-            "w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
-        ) as stream:
-            stream.write(encoded)
-            temporary = Path(stream.name)
-        try:
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-    @staticmethod
-    def _replace_from_file(source: Path, target: Path) -> None:
-        with NamedTemporaryFile(
-            "wb", dir=target.parent, prefix=f".{target.name}.", delete=False
-        ) as stream:
-            stream.write(source.read_bytes())
-            temporary = Path(stream.name)
-        try:
-            os.replace(temporary, target)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-    @staticmethod
-    def _semver(value: str) -> tuple[int, int, int]:
-        return tuple(int(part) for part in value.split("."))  # type: ignore[return-value]
+    def _semver(value: str) -> tuple[int, ...]:
+        return tuple(map(int, value.split(".")))

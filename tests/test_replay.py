@@ -37,7 +37,7 @@ class FakeSession:
 def test_multi_turn_replay_asserts_business_state_and_keeps_session_identity(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr("prompt_os.replay.StrandsSession", FakeSession)
+    monkeypatch.setattr("prompt_os.agent_loop.StrandsSession", FakeSession)
     pack = AppPack.load(ROOT / "apps" / "task-list")
     trace = TraceWriter(tmp_path / "traces.jsonl")
     case = {
@@ -71,7 +71,7 @@ def test_multi_turn_replay_asserts_business_state_and_keeps_session_identity(
 def test_replay_fails_when_observed_state_differs_from_exact_expectation(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr("prompt_os.replay.StrandsSession", FakeSession)
+    monkeypatch.setattr("prompt_os.agent_loop.StrandsSession", FakeSession)
     pack = AppPack.load(ROOT / "apps" / "task-list")
     case = {
         "id": "task-count",

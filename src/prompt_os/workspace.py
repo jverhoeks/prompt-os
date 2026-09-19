@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -14,7 +13,7 @@ from pydantic import BaseModel, Field
 from .app_pack import AppPack
 from .data_contract import DataContractRepository
 from .store import COLLECTION, DECIMAL, Document, DocumentStore
-from .tool_service import ToolService
+from .tool_service import ToolService, contract_root, database_path
 from .view_description import (
     BarChartBlock,
     BarDatum,
@@ -251,7 +250,7 @@ def _type_from_name(name: str) -> FormType:
         return "datetime"
     if parts & {"amount", "quantity", "count", "total", "duration", "price", "qty"}:
         return "decimal"
-    if name.startswith("is_") or name in {"reimbursable", "completed"}:
+    if name.startswith("is_"):
         return "boolean"
     if parts & {"note", "notes", "rationale", "context"}:
         return "text"
@@ -353,39 +352,17 @@ def capture_document(
     cleaned = {str(key): value for key, value in document.items() if str(key).strip()}
     if not cleaned:
         raise ValueError("document must be a non-empty object")
-
-    database = root / "var" / "prompt-os.sqlite"
-    database.parent.mkdir(parents=True, exist_ok=True)
-    if document_id:
-        existing = _existing_document(root, pack, document_id)
-        if existing is not None:
-            cleaned = {**existing, **cleaned}
-
-    schema = root / "contracts" / "data-contract.schema.json"
-    if schema.is_file():
-        service = ToolService(
-            app_id=pack.id,
-            database=database,
-            contract_root=root / "var" / "data-contracts",
-            contract_schema=schema,
-            timezone="UTC",
-            functionality_sha256=hashlib.sha256(
-                (pack.functionality.rstrip() + "\n").encode("utf-8")
-            ).hexdigest(),
-        )
-        try:
-            return service.put(
-                cleaned, collection=collection, document_id=document_id
-            )
-        finally:
-            service.close()
-
-    store = DocumentStore(database, app_id=pack.id)
+    service = ToolService.for_pack(root, pack)
     try:
-        stored = store.put(collection, cleaned, document_id)
-        return _record_payload(stored, title=None)
+        if document_id:
+            try:
+                existing = service.store.get(document_id, include_archived=True).value
+            except KeyError:
+                existing = {}
+            cleaned = {**existing, **cleaned}
+        return service.put(cleaned, collection=collection, document_id=document_id)
     finally:
-        store.close()
+        service.close()
 
 
 def archive_document(
@@ -395,51 +372,29 @@ def archive_document(
         raise ValueError("this application does not keep records")
     if not document_id.strip():
         raise ValueError("document id is required")
-    database = root / "var" / "prompt-os.sqlite"
-    if not database.is_file():
+    if not database_path(root).is_file():
         raise KeyError(document_id)
-    schema = root / "contracts" / "data-contract.schema.json"
-    if schema.is_file():
-        service = ToolService(
-            app_id=pack.id,
-            database=database,
-            contract_root=root / "var" / "data-contracts",
-            contract_schema=schema,
-            timezone="UTC",
-            functionality_sha256=hashlib.sha256(
-                (pack.functionality.rstrip() + "\n").encode("utf-8")
-            ).hexdigest(),
-        )
-        try:
-            return service.archive(document_id, reason)
-        finally:
-            service.close()
-    store = DocumentStore(database, app_id=pack.id)
+    service = ToolService.for_pack(root, pack)
     try:
-        return _record_payload(store.archive(document_id, reason), title=None)
+        return service.archive(document_id, reason)
     finally:
-        store.close()
+        service.close()
 
 
 def _load_documents(root: Path, pack: AppPack) -> tuple[list[Document], dict[str, int]]:
-    database = root / "var" / "prompt-os.sqlite"
+    database = database_path(root)
     if not database.is_file():
         return [], {}
     store = DocumentStore(database, app_id=pack.id)
     try:
-        return store.scan(limit=200), store.describe()
+        return store.query(limit=200), store.describe()
     finally:
         store.close()
 
 
 def _current_contract(root: Path, pack: AppPack) -> dict[str, Any] | None:
-    schema = root / "contracts" / "data-contract.schema.json"
-    if not schema.is_file():
-        return None
     try:
-        return DataContractRepository(
-            root / "var" / "data-contracts", schema
-        ).current(pack.id)
+        return DataContractRepository(contract_root(root)).current(pack.id)
     except (OSError, ValueError):
         return None
 
@@ -450,19 +405,6 @@ def _purpose_text(functionality: str) -> str | None:
         return None
     text = " ".join(match.group(1).split())
     return text or None
-
-
-def _existing_document(root: Path, pack: AppPack, document_id: str) -> dict[str, Any] | None:
-    database = root / "var" / "prompt-os.sqlite"
-    if not database.is_file():
-        return None
-    store = DocumentStore(database, app_id=pack.id)
-    try:
-        return dict(store.get(document_id, include_archived=True).value)
-    except KeyError:
-        return None
-    finally:
-        store.close()
 
 
 def _forms_from_interface(
@@ -498,15 +440,6 @@ def _enrich_interface_fields(
                     if item.name.endswith(f"_{field.name}")
                     or field.name.endswith(item.name)
                     or field.name in item.name
-                ),
-                None,
-            )
-        if observed is None and field.name in {"note", "decision"}:
-            observed = next(
-                (
-                    item
-                    for item in inferred
-                    if item.name.endswith("_statement") or item.name in {"note", "decision"}
                 ),
                 None,
             )
@@ -827,12 +760,13 @@ def _resolve_field(
     return fallback
 
 
-def _resolve_named_field(forms: list[FormDescription], names: set[str]) -> str | None:
-    for form in forms:
-        for field in form.fields:
-            if field.name in names:
-                return field.name
-    return None
+def _decimal_or_none(value: Any) -> Decimal | None:
+    if value in (None, ""):
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
 
 
 def _numeric_by_key(
@@ -840,17 +774,48 @@ def _numeric_by_key(
 ) -> dict[str, Decimal]:
     totals: dict[str, Decimal] = {}
     for document in documents:
-        if not isinstance(document.value, dict):
-            continue
         key = document.value.get(group_by)
-        value = document.value.get(field)
-        if key in (None, "") or value in (None, ""):
+        value = _decimal_or_none(document.value.get(field))
+        if key in (None, "") or value is None:
             continue
-        try:
-            totals[str(key)] = totals.get(str(key), Decimal(0)) + Decimal(str(value))
-        except (InvalidOperation, ValueError):
-            continue
+        totals[str(key)] = totals.get(str(key), Decimal(0)) + value
     return totals
+
+
+def _sum_field(documents: list[Document], field: str) -> tuple[Decimal, int]:
+    values = [_decimal_or_none(document.value.get(field)) for document in documents]
+    present = [value for value in values if value is not None]
+    return sum(present, Decimal(0)), len(present)
+
+
+def _total_metric(documents: list[Document], field: str, detail: str) -> list[MetricBlock]:
+    total, used = _sum_field(documents, field)
+    if not used:
+        return []
+    return [
+        MetricBlock(
+            type="metric",
+            label=_label(field),
+            value=format(total.normalize(), "f"),
+            detail=detail.format(used=used),
+        )
+    ]
+
+
+def _bar_chart(documents: list[Document], field: str, group_by: str) -> list[BarChartBlock]:
+    totals = _numeric_by_key(documents, field, group_by)
+    if len(totals) < 2:
+        return []
+    return [
+        BarChartBlock(
+            type="bar-chart",
+            title=f"{_label(field)} by {_label(group_by)}",
+            series=[
+                BarDatum(label=label, value=float(total), display=format(total.normalize(), "f"))
+                for label, total in sorted(totals.items(), key=lambda item: item[1], reverse=True)
+            ],
+        )
+    ]
 
 
 def _latest_value(
@@ -869,19 +834,13 @@ def _latest_value(
 
 
 def _balance_blocks(
-    documents: list[Document], field: str, group_by: str, extra: str | None
+    documents: list[Document], field: str, group_by: str
 ) -> list[MetricBlock | TableBlock]:
     totals = _numeric_by_key(documents, field, group_by)
     if not totals:
         return []
-    extras = _latest_value(documents, group_by, extra) if extra else {}
-    columns = [_label(group_by), "balance"] + ([_label(extra)] if extra else [])
-    rows = []
-    for key, total in sorted(totals.items()):
-        row = [key, format(total.normalize(), "f")]
-        if extra:
-            row.append(extras.get(key, ""))
-        rows.append(row)
+    columns = [_label(group_by), "balance"]
+    rows = [[key, format(total.normalize(), "f")] for key, total in sorted(totals.items())]
     return [
         MetricBlock(
             type="metric",
@@ -900,14 +859,8 @@ def _low_stock_blocks(
     levels = _latest_value(documents, group_by, threshold)
     rows: list[list[str]] = []
     for key, total in sorted(totals.items()):
-        level = levels.get(key)
-        if not level:
-            continue
-        try:
-            limit = Decimal(level)
-        except (InvalidOperation, ValueError):
-            continue
-        if total < limit:
+        limit = _decimal_or_none(levels.get(key))
+        if limit is not None and total < limit:
             rows.append(
                 [key, format(total.normalize(), "f"), format(limit.normalize(), "f")]
             )
@@ -931,72 +884,18 @@ def _views_from_hints(
     blocks: list[MetricBlock | BarChartBlock | TableBlock] = []
     identity = _resolve_field(forms, {"string", "text"}, fallback="item")
     amount = _resolve_field(forms, {"decimal", "number", "integer"}, fallback="quantity")
-    threshold = _resolve_named_field(forms, {"replenishment", "reorder", "threshold", "level"})
     for hint in hints:
-        if hint.get("kind") == "balance":
-            field = hint.get("field") or amount
-            group_by = hint.get("group_by") or identity
-            blocks.extend(_balance_blocks(documents, field, group_by, threshold))
-        elif hint.get("kind") == "low-stock":
-            field = hint.get("field") or amount
-            group_by = hint.get("group_by") or identity
-            level = hint.get("threshold") or threshold or "replenishment"
-            blocks.extend(_low_stock_blocks(documents, field, group_by, level))
-        elif hint.get("kind") == "total" and hint.get("field"):
-            field = hint["field"]
-            total = Decimal(0)
-            used = 0
-            for document in documents:
-                if not isinstance(document.value, dict):
-                    continue
-                value = document.value.get(field)
-                if value in (None, ""):
-                    continue
-                try:
-                    total += Decimal(str(value))
-                except (InvalidOperation, ValueError):
-                    continue
-                used += 1
-            if used:
-                blocks.append(
-                    MetricBlock(
-                        type="metric",
-                        label=_label(field),
-                        value=format(total.normalize(), "f"),
-                        detail=f"{used} records",
-                    )
-                )
-        elif hint.get("kind") == "group" and hint.get("field") and hint.get("group_by"):
-            field, group_by = hint["field"], hint["group_by"]
-            totals: dict[str, Decimal] = {}
-            for document in documents:
-                if not isinstance(document.value, dict):
-                    continue
-                key = document.value.get(group_by)
-                value = document.value.get(field)
-                if key in (None, "") or value in (None, ""):
-                    continue
-                try:
-                    totals[str(key)] = totals.get(str(key), Decimal(0)) + Decimal(str(value))
-                except (InvalidOperation, ValueError):
-                    continue
-            if len(totals) >= 2:
-                blocks.append(
-                    BarChartBlock(
-                        type="bar-chart",
-                        title=f"{_label(field)} by {_label(group_by)}",
-                        series=[
-                            BarDatum(
-                                label=label,
-                                value=float(total),
-                                display=format(total.normalize(), "f"),
-                            )
-                            for label, total in sorted(
-                                totals.items(), key=lambda item: item[1], reverse=True
-                            )
-                        ],
-                    )
-                )
+        kind = hint.get("kind")
+        field = hint.get("field") or amount
+        group_by = hint.get("group_by") or identity
+        if kind == "balance":
+            blocks.extend(_balance_blocks(documents, field, group_by))
+        elif kind == "low-stock" and hint.get("threshold"):
+            blocks.extend(_low_stock_blocks(documents, field, group_by, hint["threshold"]))
+        elif kind == "total" and hint.get("field"):
+            blocks.extend(_total_metric(documents, hint["field"], "{used} records"))
+        elif kind == "group" and hint.get("field") and hint.get("group_by"):
+            blocks.extend(_bar_chart(documents, hint["field"], hint["group_by"]))
     return blocks
 
 
@@ -1007,29 +906,9 @@ def _numeric_metrics(
     for form in forms:
         scoped = [item for item in documents if item.collection == form.collection]
         for field in form.fields:
-            if field.type not in {"decimal", "number", "integer"}:
-                continue
-            total = Decimal(0)
-            used = 0
-            for document in scoped:
-                if not isinstance(document.value, dict):
-                    continue
-                value = document.value.get(field.name)
-                if value in (None, ""):
-                    continue
-                try:
-                    total += Decimal(str(value))
-                except (InvalidOperation, ValueError):
-                    continue
-                used += 1
-            if used:
-                blocks.append(
-                    MetricBlock(
-                        type="metric",
-                        label=_label(field.name),
-                        value=format(total.normalize(), "f"),
-                        detail=f"{used} in {form.collection}",
-                    )
+            if field.type in {"decimal", "number", "integer"}:
+                blocks.extend(
+                    _total_metric(scoped, field.name, "{used} in " + form.collection)
                 )
     return blocks[:4]
 
@@ -1039,44 +918,11 @@ def _grouped_charts(
 ) -> list[BarChartBlock]:
     charts: list[BarChartBlock] = []
     for form in forms:
-        numeric = [
-            field
-            for field in form.fields
-            if field.type in {"decimal", "number", "integer"}
-        ]
-        grouped = [
-            field
-            for field in form.fields
-            if field.options and len(field.options) >= 2
-        ]
-        if not numeric or not grouped:
-            continue
-        amount, category = numeric[0], grouped[0]
-        totals: dict[str, Decimal] = {}
-        for document in documents:
-            if document.collection != form.collection or not isinstance(document.value, dict):
-                continue
-            key = document.value.get(category.name)
-            value = document.value.get(amount.name)
-            if key in (None, "") or value in (None, ""):
-                continue
-            try:
-                totals[str(key)] = totals.get(str(key), Decimal(0)) + Decimal(str(value))
-            except (InvalidOperation, ValueError):
-                continue
-        if len(totals) < 2:
-            continue
-        series = [
-            BarDatum(label=label, value=float(total), display=format(total.normalize(), "f"))
-            for label, total in sorted(totals.items(), key=lambda item: item[1], reverse=True)
-        ]
-        charts.append(
-            BarChartBlock(
-                type="bar-chart",
-                title=f"{_label(amount.name)} by {_label(category.name)}",
-                series=series,
-            )
-        )
+        numeric = [f for f in form.fields if f.type in {"decimal", "number", "integer"}]
+        grouped = [f for f in form.fields if f.options and len(f.options) >= 2]
+        if numeric and grouped:
+            scoped = [item for item in documents if item.collection == form.collection]
+            charts.extend(_bar_chart(scoped, numeric[0].name, grouped[0].name))
     return charts[:2]
 
 
@@ -1125,14 +971,4 @@ def _cell(value: Any) -> str:
 
 
 def _record_payload(document: Document, title: str | None) -> dict[str, Any]:
-    return {
-        "id": document.id,
-        "collection": document.collection,
-        "title": title or document.id,
-        "document": document.value,
-        "created_at": document.created_at,
-        "updated_at": document.updated_at,
-        "archived_at": document.archived_at,
-        "archive_reason": document.archive_reason,
-        "revision": document.revision,
-    }
+    return document.payload() | {"title": title or document.id}

@@ -116,7 +116,7 @@ def test_web_lists_apps_and_serves_the_operator_interface(tmp_path: Path) -> Non
     assert _json(detail)["functionality"].startswith("# Purpose")
 
 
-def test_web_chat_renders_a_generic_view(tmp_path: Path) -> None:
+def test_web_chat_renders_a_generic_view(tmp_path: Path, monkeypatch) -> None:
     pack = _create_app(tmp_path)
     chat = FakeChat(
         {
@@ -141,9 +141,8 @@ def test_web_chat_renders_a_generic_view(tmp_path: Path) -> None:
             ],
         }
     )
-    web = PromptWeb(
-        tmp_path, chat_factory=lambda _pack, _timezone, _debug: chat
-    )
+    monkeypatch.setattr("prompt_os.web.ApplicationChat", lambda *_args, **_kwargs: chat)
+    web = PromptWeb(tmp_path)
 
     response = web.dispatch(
         "POST",
@@ -159,10 +158,11 @@ def test_web_chat_renders_a_generic_view(tmp_path: Path) -> None:
     assert payload["tool_calls"][0]["name"] == "view.present"
 
 
-def test_web_surfaces_chat_errors_and_unknown_apps(tmp_path: Path) -> None:
+def test_web_surfaces_chat_errors_and_unknown_apps(tmp_path: Path, monkeypatch) -> None:
     pack = _create_app(tmp_path)
     chat = FakeChat(RuntimeError("model unavailable"))
-    web = PromptWeb(tmp_path, chat_factory=lambda *_args: chat)
+    monkeypatch.setattr("prompt_os.web.ApplicationChat", lambda *_args, **_kwargs: chat)
+    web = PromptWeb(tmp_path)
 
     failed = web.dispatch(
         "POST",
@@ -196,7 +196,7 @@ def test_web_promotes_a_replayed_improvement(tmp_path: Path) -> None:
 
 
 def test_web_proposes_improvements_and_runs_eval_through_injected_services(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch
 ) -> None:
     pack = _create_app(tmp_path)
     proposed = {
@@ -211,11 +211,11 @@ def test_web_proposes_improvements_and_runs_eval_through_injected_services(
         "total": 1,
         "cases": [{"id": "case-1", "passed": True, "detail": "ok"}],
     }
-    web = PromptWeb(
-        tmp_path,
-        improve_fn=lambda *_args, **_kwargs: proposed,
-        evaluate_fn=lambda *_args, **_kwargs: evaluated,
+    monkeypatch.setattr("prompt_os.web.improve", lambda *_args, **_kwargs: proposed)
+    monkeypatch.setattr(
+        "prompt_os.web.collect_evaluation", lambda *_args, **_kwargs: evaluated
     )
+    web = PromptWeb(tmp_path)
 
     improvement = web.dispatch("POST", f"/api/apps/{pack.id}/improve")
     evaluation = web.dispatch(
@@ -310,10 +310,11 @@ def test_web_workspace_captures_without_a_conversation(tmp_path: Path) -> None:
     assert len(_json(captured)["workspace"]["records"]) == 2
 
 
-def test_web_resets_a_conversation_session(tmp_path: Path) -> None:
+def test_web_resets_a_conversation_session(tmp_path: Path, monkeypatch) -> None:
     pack = _create_app(tmp_path)
     chat = FakeChat({"reply": "ok", "tool_calls": []})
-    web = PromptWeb(tmp_path, chat_factory=lambda *_args: chat)
+    monkeypatch.setattr("prompt_os.web.ApplicationChat", lambda *_args, **_kwargs: chat)
+    web = PromptWeb(tmp_path)
 
     web.dispatch(
         "POST",
